@@ -105,12 +105,17 @@ in pkgs.mkShell {
     # Builds
     gnumake git python3
 
+    # Rust toolchain and Python bindings
+    rustc cargo rustfmt clippy
+    python3Packages.pip
+    python3Packages.wheel
+    python3Packages.setuptools
+
     # Digital design
     verilog slang verilator yosys gtkwave gaw
     # Pytest and Cocoatb setup
     python3Packages.pytest
     python3Packages.cocotb
-    python3Packages.pip # requirements.txt
 
     # OpenRoad + dep
     openroad ruby stdenv.cc.cc.lib glibc expat zlib
@@ -160,7 +165,15 @@ in pkgs.mkShell {
     pip install --upgrade \
         volare==0.20.6 \
         openlane==2.3.10 \
-        cace==2.6.0
+        cace==2.6.0 \
+        maturin \
+        numpy \
+        matplotlib
+    
+    # Rust environment setup
+    export CARGO_HOME="$PROJECT_ROOT/.cargo"
+    export RUSTUP_HOME="$PROJECT_ROOT/.rustup"
+    mkdir -p "$CARGO_HOME" "$RUSTUP_HOME"
     
     # Download xschem_sky130 library
     volare enable --pdk sky130 0fe599b2afb6708d281543108caf8310912f54af

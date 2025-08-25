@@ -1,12 +1,114 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+*.pdb
+
+# Cargo lock file (uncomment if you want to commit Cargo.lock)
+# Cargo.lock
+
 # IDE files
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
-# OS files
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 
-# Tools
+# EDA tool outputs
+*.log
+*.rpt
+*.out
+*.ext
+*.spice
+*.cir
+*.raw
+*.ac0
+*.tr0
+*.sw0
+*.mag
+*.gds
+*.lef
+*.def
+*.oa
+*.cdl
+*.spi
+
+# Magic VLSI files
+*.magx
+magic_*
+.magic/
+
+# KLayout files
+*.lyp
+*.lyt
+
+# NGSpice files
+*.listing
+nutmeg.tmp*
+
+# Yosys files
+*.blif
+*.edif
+*.json
+
+# Verification outputs
+test_results/
+coverage/
+*.vcd
+*.fst
+*.lxt2
+*.ghw
+
+# Build directories
+build/
+output/
+generated/
+results/
+.cargo/
+.rustup/
 .venv/
 .tools/
-.tmp/
+Cargo.lock
+.claude/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Python cache (for CocoTB and other Python tools)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Documentation build
+docs/_build/
+docs/site/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Project specific
+analog/*/layout/*.gds
+analog/*/layout/*.mag
+analog/*/spice/*.raw
+digital/*/build/
+digital/*/test/results/
