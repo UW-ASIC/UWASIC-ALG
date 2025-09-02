@@ -17,7 +17,8 @@ serde_json = "1.0"
 rayon = "1.7"
 
 # Optimization libraries - keeping it simple with well-established crates
-argmin = "0.10"
+argmin = { version = "0.10", features = ["serde1"] }
+argmin-math = { version = "0.4", features = ["vec"] }
 rand = "0.8"
 
 # File system operations
@@ -31,6 +32,7 @@ pyo3-asyncio = { version = "0.19", optional = true }
 crossbeam = "0.8"
 num_cpus = "1.16"
 indexmap = "1.9"
+glob = "0.3.3"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

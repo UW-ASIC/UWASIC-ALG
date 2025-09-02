@@ -1,8 +1,8 @@
 #[cfg(test)]
-mod spice_tests {
+mod tests {
     use std::fs;
     use std::path::Path;
-    use std::env;
+    
     use xschemoptimizer::{gen_spice_file, run_spice};
 
     #[test]

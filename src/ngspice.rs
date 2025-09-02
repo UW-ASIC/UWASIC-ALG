@@ -155,6 +155,16 @@ pub fn gen_spice_file<P1: AsRef<Path>, P2: AsRef<Path>>(
     }
 }
 
+pub fn gen_spice_files<P1: AsRef<Path>, P2: AsRef<Path>>(
+    testbench_file_path: P1, 
+    current_dir: P2, 
+    netlist_dir: &str,
+    SpiceCodes: Vec<String>
+) -> IoResult<SpiceGenerationResult> {
+    // Change Spice Code then generate SPICE file
+
+}
+
 /// Result of SPICE file generation
 #[derive(Debug, Clone)]
 pub struct SpiceGenerationResult {

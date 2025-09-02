@@ -1,266 +1,192 @@
+use argmin::core::{CostFunction, Gradient};
+use std::path::PathBuf;
 use std::collections::HashMap;
-use std::fs;
-use std::path::Path;
-use crate::ngspice::{run_spice, SimulationResult};
-
-// NgSpice interface that uses the real ngspice functionality
-pub struct NgSpiceInterface {
-    pub timeout_secs: u64,
-}
-
-impl NgSpiceInterface {
-    pub fn new() -> Self {
-        Self { timeout_secs: 30 }
-    }
-
-    pub fn run_simulation(&self, spice_content: &str, _simulator: &str) -> Result<SimulationResult, std::io::Error> {
-        // Write SPICE content to a temporary file
-        let temp_file = "/tmp/temp_simulation.spice";
-        fs::write(temp_file, spice_content)?;
-        
-        // Run the actual ngspice simulation
-        let result = run_spice(temp_file)?;
-        
-        // Clean up temporary file
-        let _ = fs::remove_file(temp_file);
-        
-        Ok(result)
-    }
-
-    pub fn run_simulation_from_file<P: AsRef<Path>>(&self, spice_file_path: P) -> Result<SimulationResult, std::io::Error> {
-        run_spice(spice_file_path)
-    }
-}
+use crate::{gen_spice_file, run_spice, XSchemIO};
+use crate::{glob_files};
+use glob::glob;
 
 #[derive(Debug, Clone)]
-pub struct SpiceRunConfig {
-    pub expected_metrics: Vec<String>,
-    pub weight: f64,
+pub struct TargetMetric {
+    pub target_name: String,
+    pub target_value: f64,
+    pub spice_code: String,
 }
 
+impl TargetMetric {
+    pub fn new(target_name: &str, target_value: f64, spice_code: &str) -> Self {
+        Self {
+            target_name: target_name.to_string(),
+            target_value,
+            spice_code: spice_code.to_string(),
+        }
+    }
+}
+
+// Argmin Solver Problem
 #[derive(Debug, Clone)]
-pub struct ComponentParameter {
-    pub component_name: String,
-    pub parameter_name: String,
-    pub min_value: f64,
-    pub max_value: f64,
-    pub current_value: f64,
-}
-
 pub struct OptimizationProblem {
-    target_values: HashMap<String, f64>,
-    weights: Vec<f64>,
-    spice_runs: Vec<SpiceRunConfig>,
-    component_parameters: Vec<ComponentParameter>,
-    current_iteration: usize,
-    previous_results: Vec<SimulationResult>,
+    target_metrics: Vec<TargetMetric>, // User-Defined target
+    parameter_map: Vec<(String, String)>, // User-Defined Parameters in Problem
+
+    // Files involved
+    current_dir: PathBuf,
+    netlist_dir: PathBuf,
 }
 
 impl OptimizationProblem {
-    /// Create a new OptimizationProblem with SPICE runs and component parameters
-    pub fn new(
-        spice_runs: Vec<SpiceRunConfig>,
-        component_parameters: Vec<ComponentParameter>,
-    ) -> Self {
-        let mut target_values = HashMap::new();
-        let mut weights = Vec::new();
-        
-        // Build target values and weights from spice runs
-        for (i, run_config) in spice_runs.iter().enumerate() {
-            for metric in &run_config.expected_metrics {
-                target_values.insert(format!("{}_{}", metric, i), 0.0); // Default target
-            }
-            weights.push(run_config.weight);
-        }
-        
-        println!("=== Optimization Problem Created ===");
-        println!("Parameters to optimize:");
-        for param in &component_parameters {
-            println!("  {:<8} {:<2}: {:<8.4} (range: {:.3} - {:.3})", 
-                param.component_name, 
-                param.parameter_name, 
-                param.current_value,
-                param.min_value,
-                param.max_value
-            );
-        }
-        println!("Expected metrics: {:?}", spice_runs.iter().map(|r| &r.expected_metrics).collect::<Vec<_>>());
-        
+    pub fn new(target_metrics: Vec<TargetMetric>, parameter_map: Vec<(String, String)>,
+             current_dir: PathBuf, netlist_dir: PathBuf) -> Self {
         Self {
-            target_values,
-            weights,
-            spice_runs,
-            component_parameters,
-            current_iteration: 0,
-            previous_results: Vec::new(),
+            target_metrics,
+            parameter_map,
+            current_dir,
+            netlist_dir,
         }
     }
-    
-    /// Update target values for specific metrics
-    pub fn set_target_values(&mut self, targets: HashMap<String, f64>) {
-        println!("=== Setting Target Values ===");
-        for (key, value) in &targets {
-            println!("  {}: {:.6}", key, value);
-            self.target_values.insert(key.clone(), *value);
+
+    pub fn update_simulation(&self, parameters: &[f64]) -> Result<(), String> {
+        let files = glob_files(self.current_dir.to_str().unwrap())
+            .map_err(|e| format!("Failed to glob files: {}", e))?;
+        
+        if let Some(schematic_file) = &files.schematic {
+            // Load and update the schematic with new parameters
+            let mut schematic = XSchemIO::load(schematic_file)
+                .map_err(|e| format!("Failed to load schematic: {}", e))?;
+
+            // Update parameters in the schematic
+            for (i, (param_name, component_name)) in self.parameter_map.iter().enumerate() {
+                if let Some(&parameter_value) = parameters.get(i) {
+                    if let Some(component) = schematic.find_component_by_name_mut(component_name) {
+                        component.properties.insert(param_name.clone(), parameter_value.to_string());
+                    }
+                }
+            }
+
+            // Save the updated schematic
+            schematic.save(schematic_file)
+                .map_err(|e| format!("Failed to save schematic: {}", e))?;
         }
+
+        Ok(())
     }
-    
-    /// Iterate to setup the next run based on feedback from the current one
-    /// This function analyzes previous results and adjusts parameters for the next iteration
-    pub fn iterate(&mut self, current_results: Vec<SimulationResult>) -> Vec<f64> {
-        println!("\n=== Optimization Iteration {} ===", self.current_iteration + 1);
+
+    pub fn run_simulation(&self) -> Result<Vec<f64>, String> {
+        // Generate SPICE files if needed
+        let files = glob_files(self.current_dir.to_str().unwrap())
+            .map_err(|e| format!("Failed to glob files: {}", e))?;
         
-        // Store old parameters for comparison
-        let old_params: Vec<f64> = self.component_parameters.iter().map(|p| p.current_value).collect();
+        if let Some(testbench_file) = &files.testbench {
+            let results = gen_spice_files(
+                testbench_file, 
+                &self.current_dir, 
+                self.netlist_dir.to_str().unwrap() // update this to take in &str of ngspice code
+            ).map_err(|e| format!("SPICE generation failed: {}", e))?;
+            
+            if !results.success {
+                return Err(format!("SPICE generation failed: {:?}", results.error));
+            }
+        }
+
+        // Find and run all SPICE files in netlist directory
+        let spice_pattern = format!("{}/**/*.spice", self.netlist_dir.to_str().unwrap());
+        let spice_files: Vec<_> = glob(&spice_pattern)
+            .map_err(|e| format!("Failed to glob SPICE files: {}", e))?
+            .filter_map(|entry| entry.ok())
+            .collect();
+
+        if spice_files.is_empty() {
+            return Err("No SPICE files found for simulation".to_string());
+        }
+
+        let mut all_metrics = HashMap::new();
         
-        self.current_iteration += 1;
-        self.previous_results.extend(current_results.clone());
-        
-        // Display current simulation results
-        println!("Simulation Results:");
-        for (run_idx, result) in current_results.iter().enumerate() {
-            println!("  Run {}: success={}, time={:.3}s", run_idx, result.success, result.execution_time);
-            for (metric_name, value) in &result.metrics {
-                if let Some(&target) = self.target_values.get(&format!("{}_{}", metric_name, run_idx)) {
-                    let error_percent = if target != 0.0 {
-                        (value - target) / target * 100.0
+        // Run simulations on all SPICE files (needs to be updated to be run in parallel)
+        for spice_file in &spice_files {
+            match run_spice(spice_file) {
+                Ok(results) => {
+                    if results.success {
+                        // Merge metrics from this simulation
+                        for (key, value) in results.get_metrics() {
+                            all_metrics.insert(key.clone(), *value);
+                        }
                     } else {
-                        0.0
-                    };
-                    println!("    {}: {:.6} (target: {:.6}, error: {:.1}%)", 
-                             metric_name, value, target, error_percent);
-                } else {
-                    println!("    {}: {:.6}", metric_name, value);
+                        eprintln!("SPICE simulation failed for {}: {:?}", 
+                                spice_file.display(), results.error);
+                    }
+                }
+                Err(e) => {
+                    return Err(format!("Failed to run SPICE simulation for {}: {}", 
+                                     spice_file.display(), e));
                 }
             }
         }
         
-        // Analyze current results and extract metrics
-        let mut metric_values: HashMap<String, f64> = HashMap::new();
-        for (run_idx, result) in current_results.iter().enumerate() {
-            for (metric_name, value) in &result.metrics {
-                let key = format!("{}_{}", metric_name, run_idx);
-                metric_values.insert(key, *value);
-            }
+        // Extract target metrics in the order they appear in target_metrics
+        let mut result_values = Vec::with_capacity(self.target_metrics.len());
+        for target in &self.target_metrics {
+            let value = all_metrics.get(&target.target_name)
+                .copied()
+                .unwrap_or(0.0);
+            result_values.push(value);
         }
         
-        // Calculate parameter adjustments based on results
-        let mut new_params = Vec::new();
-        for i in 0..self.component_parameters.len() {
-            let adjusted_value = self.calculate_parameter_adjustment(&self.component_parameters[i], &metric_values);
-            new_params.push(adjusted_value);
-        }
-        
-        // Update the parameters
-        for (i, param) in self.component_parameters.iter_mut().enumerate() {
-            if i < new_params.len() {
-                param.current_value = new_params[i];
-            }
-        }
-        
-        // Apply learning rate decay based on iteration
-        let learning_rate = 1.0 / (1.0 + 0.1 * self.current_iteration as f64);
-        println!("Learning rate: {:.4}", learning_rate);
-        
-        // Adjust parameters with bounds checking and learning rate
-        for (i, param) in self.component_parameters.iter_mut().enumerate() {
-            if i < new_params.len() {
-                let old_value = param.current_value;
-                let suggested_value = new_params[i];
-                
-                // Apply learning rate
-                let adjusted_value = old_value + learning_rate * (suggested_value - old_value);
-                
-                // Clamp to bounds
-                param.current_value = adjusted_value.clamp(param.min_value, param.max_value);
-                new_params[i] = param.current_value;
-            }
-        }
-        
-        // Display parameter changes
-        println!("Parameter Updates:");
-        for (i, param) in self.component_parameters.iter().enumerate() {
-            if i < old_params.len() && i < new_params.len() {
-                let change = new_params[i] - old_params[i];
-                let change_sign = if change > 0.0 { "+" } else { "" };
-                println!("  {:<8} {:<2}: {:<8.4} -> {:<8.4} ({}{:.6}) [{:.3}-{:.3}]", 
-                    param.component_name, 
-                    param.parameter_name, 
-                    old_params[i],
-                    new_params[i],
-                    change_sign,
-                    change,
-                    param.min_value,
-                    param.max_value
-                );
-            }
-        }
-        
-        new_params
-    }
-    
-    /// Calculate parameter adjustment based on current metrics and targets
-    fn calculate_parameter_adjustment(
-        &self, 
-        param: &ComponentParameter, 
-        metric_values: &HashMap<String, f64>
-    ) -> f64 {
-        let mut total_error = 0.0;
-        let mut total_weight = 0.0;
-        
-        // Calculate weighted error across all relevant metrics
-        for (run_idx, run_config) in self.spice_runs.iter().enumerate() {
-            for metric_name in &run_config.expected_metrics {
-                let key = format!("{}_{}", metric_name, run_idx);
-                let target_key = key.clone();
-                
-                if let (Some(&current_value), Some(&target_value)) = 
-                    (metric_values.get(&key), self.target_values.get(&target_key)) {
-                    
-                    let error = (current_value - target_value) / target_value.abs().max(1e-9);
-                    total_error += error * run_config.weight;
-                    total_weight += run_config.weight;
-                }
-            }
-        }
-        
-        if total_weight > 0.0 {
-            let normalized_error = total_error / total_weight;
-            
-            // Simple gradient-based adjustment
-            let adjustment_factor = 0.1; // This could be made adaptive
-            let direction = if normalized_error > 0.0 { -1.0 } else { 1.0 };
-            let magnitude = normalized_error.abs() * adjustment_factor;
-            
-            let range = param.max_value - param.min_value;
-            let adjustment = direction * magnitude * range * 0.01; // 1% of range max
-            
-            param.current_value + adjustment
-        } else {
-            // No feedback available, keep current value
-            param.current_value
-        }
-    }
-    
-    /// Get current parameter vector for optimization algorithms
-    pub fn get_current_parameters(&self) -> Vec<f64> {
-        self.component_parameters.iter().map(|p| p.current_value).collect()
-    }
-    
-    /// Get parameter bounds for constrained optimization
-    pub fn get_parameter_bounds(&self) -> (Vec<f64>, Vec<f64>) {
-        let lower_bounds: Vec<f64> = self.component_parameters.iter().map(|p| p.min_value).collect();
-        let upper_bounds: Vec<f64> = self.component_parameters.iter().map(|p| p.max_value).collect();
-        (lower_bounds, upper_bounds)
-    }
-    
-    /// Get current iteration count
-    pub fn get_iteration(&self) -> usize {
-        self.current_iteration
-    }
-    
-    /// Get history of previous simulation results
-    pub fn get_result_history(&self) -> &[SimulationResult] {
-        &self.previous_results
+        Ok(result_values)
     }
 }
+
+/// Implement CostFunction for argmin
+impl CostFunction for OptimizationProblem {
+    type Param = Vec<f64>;
+    type Output = f64;
+    
+    fn cost(&self, param: &Self::Param) -> Result<Self::Output, argmin::core::Error> {
+        // Update simulation with new parameters
+        if let Err(e) = self.update_simulation(param) {
+            eprintln!("Failed to update simulation: {}", e);
+            return Ok(f64::MAX);
+        }
+        
+        // Run simulation and get target metric values
+        match self.run_simulation() {
+            Ok(metric_values) => {
+                // Calculate Sum of Squared Errors
+                let cost: f64 = self.target_metrics.iter()
+                    .enumerate()
+                    .map(|(i, target)| {
+                        let measured = metric_values.get(i).copied().unwrap_or(0.0);
+                        (measured - target.target_value).powi(2)
+                    })
+                    .sum();
+                Ok(cost)
+            },
+            Err(e) => {
+                eprintln!("Simulation error: {}", e);
+                Ok(f64::MAX) // Return high cost for failed simulations
+            }
+        }
+    }
+}
+
+/// Implement Gradient for argmin
+impl Gradient for OptimizationProblem {
+    type Param = Vec<f64>;
+    type Gradient = Vec<f64>;
+    
+    // Based on numerical differentiation
+    fn gradient(&self, param: &Self::Param) -> Result<Self::Gradient, argmin::core::Error> {
+        let epsilon = 1e-8;
+        let base_cost = self.cost(param)?;
+        let mut gradient = Vec::with_capacity(param.len());
+        
+        for i in 0..param.len() {
+            let mut param_plus = param.clone();
+            param_plus[i] += epsilon;
+            let cost_plus = self.cost(&param_plus)?;
+            
+            gradient.push((cost_plus - base_cost) / epsilon);
+        }
+        
+        Ok(gradient)
+    }
+}
+

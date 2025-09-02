@@ -111,21 +111,8 @@ in pkgs.mkShell {
     python3Packages.wheel
     python3Packages.setuptools
 
-    # Digital design
-    verilog slang verilator yosys gtkwave gaw
-    # Pytest and Cocoatb setup
-    python3Packages.pytest
-    python3Packages.cocotb
-
-    # OpenRoad + dep
-    openroad ruby stdenv.cc.cc.lib glibc expat zlib
-    python3Packages.rich
-    python3Packages.click
-    python3Packages.tkinter
-    python3Packages.pyyaml
-
-    # Analog Design
-    xschem ngspice netgen-old klayout magic-vlsi-old
+    # Core analog design tools (required by optimizer)
+    xschem ngspice
     # For Data
     python3Packages.numpy
     python3Packages.matplotlib
@@ -140,14 +127,9 @@ in pkgs.mkShell {
     export TOOLS_DIR="$PROJECT_ROOT/.tools"
     mkdir -p "$TOOLS_DIR/bin"
     export PATH="$TOOLS_DIR/bin:$PATH"
-    export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib:${pkgs.glibc}/lib:${pkgs.expat}/lib:${pkgs.zlib}/lib:$LD_LIBRARY_PATH"
-    export FONTCONFIG_FILE=${pkgs.fontconfig.out}/etc/fonts/fonts.conf
-    export FONTCONFIG_PATH=${pkgs.fontconfig.out}/etc/fonts
-
     # PDK setup
     export PDK_ROOT="$HOME/.volare"
     export PDK="sky130A"
-    export KLAYOUT_PATH="$PDK_ROOT/$PDK/libs.tech/klayout"
     
     # XSchem Setup
     export XSCHEM_USER_LIBRARY_PATH="$PDK_ROOT/$PDK/libs.tech/xschem"
@@ -164,8 +146,6 @@ in pkgs.mkShell {
     source "$VENV_DIR/bin/activate"
     pip install --upgrade \
         volare==0.20.6 \
-        openlane==2.3.10 \
-        cace==2.6.0 \
         maturin \
         numpy \
         matplotlib
@@ -188,12 +168,9 @@ set num_threads=4
 EOF
     fi
     
-    echo "System tools available:"
+    echo "Optimizer tools available:"
     echo "  - xschem: $(xschem --version 2>/dev/null || echo 'custom build')"
-    echo "  - yosys: $(yosys -V 2>/dev/null | head -1 || echo 'unknown version')"
     echo "  - ngspice: $(ngspice --version 2>/dev/null | head -1 || echo 'unknown version')"
-    echo "  - verilator: $(verilator --version 2>/dev/null | head -1 || echo 'unknown version')"
-    echo "  - magic: $(magic --version 2>/dev/null || echo 'custom build ${magic-vlsi-old.version}')"
     echo "  - PDK: $PDK in $PDK_ROOT"
   '';
 }
