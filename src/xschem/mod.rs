@@ -13,7 +13,7 @@ use parser::parse_file;
 use writer::write_file;
 
 pub struct XSchemIO {
-    components: Vec<XSchemObject>,
+    pub components: Vec<XSchemObject>,
 }
 
 impl XSchemIO {

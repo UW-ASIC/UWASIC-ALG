@@ -1,28 +1,22 @@
-v {xschem version=3.4.4 file_version=1.2
-}
-G {}
-K {}
-V {}
-S {}
-E {}
-N 0 90 0 160 { lab=#net1 }
-N -60 130 -60 160 { lab=#net2 }
-N -150 50 -130 50 { lab=V+ }
-N -150 -50 -130 -50 { lab=V- }
-N 140 0 160 0 { lab=vout }
-N -260 0 -210 0 { lab=#net3 }
-N -210 0 -210 50 { lab=#net3 }
-N -210 -50 -210 0 { lab=#net3 }
-C {OpAmp.sym} 20 0 0 0 { name=x1 }
-C {devices/vsource.sym} -290 0 1 0 {
-name=V1
-value="DC 0.9V"
-savecurrent=false
-}
-C {devices/code_shown.sym} 240 120 0 0 {
-name=s1
-only_toplevel=false
-value="
+** sch_path: /home/omare/Documents/UWASIC/XSchemOptimizer/examples/template/OpAmp_tb.sch
+**.subckt OpAmp_tb
+x1 ?1 vdd ?1 vout ?1 V- ?1 V+ ?1 net2 ?1 net1  OpAmp
+**** end_element
+V1 ?1 net3 ?1 net4  DC 0.9V 
+**** end_element
+V2 ?1 vdd ?1 GND  DC 1.8V 
+**** end_element
+V4 ?1 net2 ?1 net1  DC 0.7V 
+**** end_element
+C1 ?1 vout ?1 GND  5p m=1
+**** end_element
+V3 ?1 V+ ?1 net3  DC 0V AC 1mV 
+**** end_element
+V5 ?1 V- ?1 net3  DC 0V AC 1mV 
+**** end_element
+**** begin user architecture code
+
+
 .ac dec 50 1 1G
 .control
 run
@@ -240,59 +234,77 @@ let area_m6 = @M6[W] * @M6[L]
 let total_area = area_m1 + area_m2 + area_m3 + area_m4 + area_m5 + area_m6
 echo 'TOTAL_AREA:' $&total_area
 .endc
-"
-}
-C {sky130_fd_pr/corner.sym} 300 -100 0 0 {
-name=CORNER
-only_toplevel=false
-corner=tt
-}
-C {devices/lab_pin.sym} 160 0 1 0 {
-name=p1
-sig_type=std_logic
-lab=vout
-}
-C {devices/lab_pin.sym} -150 50 3 0 {
-name=p2
-sig_type=std_logic
-lab=V+
-}
-C {devices/lab_pin.sym} -150 -50 3 0 {
-name=p3
-sig_type=std_logic
-lab=V-
-}
-C {devices/vsource.sym} 30 -90 3 0 {
-name=V2
-value="DC 1.8V"
-savecurrent=false
-}
-C {devices/gnd.sym} 60 -90 3 0 { name=l6 lab=GND }
-C {devices/lab_pin.sym} 0 -90 1 0 {
-name=p4
-sig_type=std_logic
-lab=vdd
-}
-C {devices/vsource.sym} -30 160 3 0 {
-name=V4
-value="DC 0.7V"
-savecurrent=false
-}
-C {devices/capa.sym} 140 30 0 0 {
-name=C1
-m=1
-value=5p
-footprint=1206
-device="ceramic capacitor"
-}
-C {devices/gnd.sym} 140 60 0 0 { name=l1 lab=GND }
-C {devices/vsource.sym} -180 50 1 0 {
-name=V3
-value="DC 0V AC 1mV"
-savecurrent=false
-}
-C {devices/vsource.sym} -180 -50 1 0 {
-name=V5
-value="DC 0V AC 1mV"
-savecurrent=false
-}
+
+
+
+.param mc_mm_switch=0
+.param mc_pr_switch=0
+.include /home/omare/.volare/sky130A/libs.tech/ngspice/corners/tt.spice
+.include /home/omare/.volare/sky130A/libs.tech/ngspice/r+c/res_typical__cap_typical.spice
+.include /home/omare/.volare/sky130A/libs.tech/ngspice/r+c/res_typical__cap_typical__lin.spice
+.include /home/omare/.volare/sky130A/libs.tech/ngspice/corners/tt/specialized_cells.spice
+
+**** end user architecture code
+**.ends
+
+* expanding   symbol:  OpAmp.sym # of pins=6
+** sym_path: /home/omare/Documents/UWASIC/XSchemOptimizer/examples/template/OpAmp.sym
+** sch_path: /home/omare/Documents/UWASIC/XSchemOptimizer/examples/template/OpAmp.sch
+.subckt OpAmp VDD Vout Vminus Vplus Vbias VSS 
+*.ipin Vplus
+*.ipin Vminus
+*.iopin VDD
+*.iopin VSS
+*.ipin Vbias
+*.opin Vout
+**** spice_prefix X
+M1 ?1 net2 ?1 Vminus ?1 net1 ?1 VSS  sky130_fd_pr__nfet_01v8 L=0.5 W=10
++ nf=1 ad='int((nf+1)/2) * W/nf * 0.29' as='int((nf+2)/2) * W/nf * 0.29' pd='2*int((nf+1)/2) * (W/nf + 0.29)' ps='2*int((nf+2)/2) * (W/nf + 0.29)'
++ nrd='0.29 / W' nrs='0.29 / W' sa=0 sb=0 sd=0 
++ mult=1 m=1
+**** end_element
+**** spice_prefix X
+M2 ?1 net3 ?1 Vplus ?1 net1 ?1 VSS  sky130_fd_pr__nfet_01v8 L=0.5 W=10
++ nf=1 ad='int((nf+1)/2) * W/nf * 0.29' as='int((nf+2)/2) * W/nf * 0.29' pd='2*int((nf+1)/2) * (W/nf + 0.29)' ps='2*int((nf+2)/2) * (W/nf + 0.29)'
++ nrd='0.29 / W' nrs='0.29 / W' sa=0 sb=0 sd=0 
++ mult=1 m=1
+**** end_element
+**** spice_prefix X
+M3 ?1 net2 ?1 net2 ?1 VDD ?1 VDD  sky130_fd_pr__pfet_01v8 L=0.5 W=5
++ nf=1 ad='int((nf+1)/2) * W/nf * 0.29' as='int((nf+2)/2) * W/nf * 0.29' pd='2*int((nf+1)/2) * (W/nf + 0.29)' ps='2*int((nf+2)/2) * (W/nf + 0.29)'
++ nrd='0.29 / W' nrs='0.29 / W' sa=0 sb=0 sd=0 
++ mult=1 m=1
+**** end_element
+**** spice_prefix X
+M4 ?1 net3 ?1 net2 ?1 VDD ?1 VDD  sky130_fd_pr__pfet_01v8 L=0.5 W=5
++ nf=1 ad='int((nf+1)/2) * W/nf * 0.29' as='int((nf+2)/2) * W/nf * 0.29' pd='2*int((nf+1)/2) * (W/nf + 0.29)' ps='2*int((nf+2)/2) * (W/nf + 0.29)'
++ nrd='0.29 / W' nrs='0.29 / W' sa=0 sb=0 sd=0 
++ mult=1 m=1
+**** end_element
+**** spice_prefix X
+M5 ?1 net1 ?1 Vbias ?1 VSS ?1 VSS  sky130_fd_pr__nfet_01v8 L=0.5 W=20
++ nf=1 ad='int((nf+1)/2) * W/nf * 0.29' as='int((nf+2)/2) * W/nf * 0.29' pd='2*int((nf+1)/2) * (W/nf + 0.29)' ps='2*int((nf+2)/2) * (W/nf + 0.29)'
++ nrd='0.29 / W' nrs='0.29 / W' sa=0 sb=0 sd=0 
++ mult=1 m=1
+**** end_element
+**** spice_prefix X
+M6 ?1 Vout ?1 net3 ?1 VDD ?1 VDD  sky130_fd_pr__pfet_01v8 L=0.5 W=15.1875
++ nf=1 ad='int((nf+1)/2) * W/nf * 0.29' as='int((nf+2)/2) * W/nf * 0.29' pd='2*int((nf+1)/2) * (W/nf + 0.29)' ps='2*int((nf+2)/2) * (W/nf + 0.29)'
++ nrd='0.29 / W' nrs='0.29 / W' sa=0 sb=0 sd=0 
++ mult=1 m=1
+**** end_element
+**** spice_prefix X
+C1 ?1 Vout ?1 net3  sky130_fd_pr__cap_mim_m3_1 W=1 L=1 MF=1 m=1
+**** end_element
+**** spice_prefix X
+M7 ?1 Vout ?1 Vbias ?1 VSS ?1 VSS  sky130_fd_pr__nfet_01v8 L=0.3 W=1
++ nf=1 ad='int((nf+1)/2) * W/nf * 0.29' as='int((nf+2)/2) * W/nf * 0.29' pd='2*int((nf+1)/2) * (W/nf + 0.29)' ps='2*int((nf+2)/2) * (W/nf + 0.29)'
++ nrd='0.29 / W' nrs='0.29 / W' sa=0 sb=0 sd=0 
++ mult=1 m=1
+**** end_element
+.ends
+
+.GLOBAL GND
+.GLOBAL VDD
+.GLOBAL VSS
+.end

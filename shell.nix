@@ -22,7 +22,7 @@ let
     buildPhase = ''
       make
     '';
-      
+
     installPhase = ''
       make install
     '';
@@ -100,7 +100,7 @@ let
 
   };
 in pkgs.mkShell {
-  name = "template";
+  name = "xschem-optimizer";
   buildInputs = with pkgs; [
     # Builds
     gnumake git python3
@@ -130,18 +130,18 @@ in pkgs.mkShell {
     # PDK setup
     export PDK_ROOT="$HOME/.volare"
     export PDK="sky130A"
-    
+
     # XSchem Setup
     export XSCHEM_USER_LIBRARY_PATH="$PDK_ROOT/$PDK/libs.tech/xschem"
     export XSCHEM_LIBRARY_PATH="$PDK_ROOT/$PDK/libs.tech/xschem:${xschem}/share/xschem/xschem_library"
-    
+
     # Setup Python virtual environment
     export VENV_DIR="$PROJECT_ROOT/.venv"
     if [ ! -d "$VENV_DIR" ]; then
         echo "Creating Python virtual environment..."
         python -m venv "$VENV_DIR"
     fi
-    
+
     # Activate virtual environment
     source "$VENV_DIR/bin/activate"
     pip install --upgrade \
@@ -149,12 +149,12 @@ in pkgs.mkShell {
         maturin \
         numpy \
         matplotlib
-    
+
     # Rust environment setup
     export CARGO_HOME="$PROJECT_ROOT/.cargo"
     export RUSTUP_HOME="$PROJECT_ROOT/.rustup"
     mkdir -p "$CARGO_HOME" "$RUSTUP_HOME"
-    
+
     # Download xschem_sky130 library
     volare enable --pdk sky130 0fe599b2afb6708d281543108caf8310912f54af
 
@@ -167,7 +167,7 @@ set ng_nomodcheck
 set num_threads=4
 EOF
     fi
-    
+
     echo "Optimizer tools available:"
     echo "  - xschem: $(xschem --version 2>/dev/null || echo 'custom build')"
     echo "  - ngspice: $(ngspice --version 2>/dev/null | head -1 || echo 'unknown version')"
