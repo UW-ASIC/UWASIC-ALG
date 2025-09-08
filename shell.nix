@@ -107,6 +107,7 @@ in pkgs.mkShell {
 
     # Rust toolchain and Python bindings
     rustc cargo rustfmt clippy
+    maturin
     python3Packages.pip
     python3Packages.wheel
     python3Packages.setuptools
@@ -167,6 +168,10 @@ set ng_nomodcheck
 set num_threads=4
 EOF
     fi
+
+    export TMPDIR="$HOME/tmp"
+    mkdir -p "$TMPDIR"
+    echo "TMPDIR set to: $TMPDIR"
 
     echo "Optimizer tools available:"
     echo "  - xschem: $(xschem --version 2>/dev/null || echo 'custom build')"

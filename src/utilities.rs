@@ -16,18 +16,6 @@ impl SchematicFiles {
             testbench: None,
         }
     }
-    
-    pub fn is_complete(&self) -> bool {
-        self.schematic.is_some() && self.symbol.is_some() && self.testbench.is_some()
-    }
-    
-    pub fn missing_files(&self) -> Vec<&'static str> {
-        let mut missing = Vec::new();
-        if self.schematic.is_none() { missing.push("schematic (.sch)"); }
-        if self.symbol.is_none() { missing.push("symbol (.sym)"); }
-        if self.testbench.is_none() { missing.push("testbench (_tb.sch)"); }
-        missing
-    }
 }
 
 pub fn glob_files(directory: &str) -> Result<SchematicFiles, String> {

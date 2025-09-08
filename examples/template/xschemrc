@@ -1,0 +1,25 @@
+source $env(HOME)/.volare/volare/sky130/versions/0fe599b2afb6708d281543108caf8310912f54af/sky130A/libs.tech/xschem/xschemrc
+        
+set SKYWATER_MODELS "$env(HOME)/.volare/sky130A/libs.tech/ngspice"
+set SKYWATER_STDCELLS "$env(HOME)/.volare/sky130A/libs.ref/sky130_fd_sc_hd/spice"
+
+puts "PDK set SKYWATER_MODELS to: $SKYWATER_MODELS"
+puts "PDK set SKYWATER_STDCELLS to: $SKYWATER_STDCELLS"
+
+#### PROJECT CONFIGURATION
+set PROJECT_NAME "template"
+set dark_colorscheme 1
+set gaw_viewer "gaw"
+set editor "vim"
+
+set PROJECT_ROOT [file normalize "[file dirname [info script]]"]
+set netlist_dir [file normalize "[file dirname [info script]]/spice"]
+
+#### NETLIST CONFIGURATION
+file mkdir $netlist_dir
+set XSCHEM_NETLIST_DIR $netlist_dir
+set netlist_type spice
+set spice_netlist 1
+
+#### LIBRARY PATHS
+append XSCHEM_LIBRARY_PATH :[file dirname [info script]]

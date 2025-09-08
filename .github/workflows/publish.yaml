@@ -24,9 +24,11 @@ jobs:
       with:
         github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Build wheels
+    - name: Build wheels with full optimizations
       run: |
-        nix-shell --run "maturin build --release --out dist"
+        nix-shell --run "maturin build --release --strip --out dist"
+      env:
+        RUSTFLAGS: "-C target-cpu=native -C opt-level=3 -C codegen-units=1 -C lto=fat"
 
     - name: Upload wheels as artifacts
       uses: actions/upload-artifact@v4

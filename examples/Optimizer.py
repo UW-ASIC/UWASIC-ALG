@@ -16,9 +16,9 @@ INITIAL_PARAMS = {
 # Op-amp tests optimized for TIA application requirements
 TESTS = {
     "dc_characteristics": {
-        "v1_common_mode": "DC 0.9V",
-        "v3_vplus_input": "DC 0V AC 1V", 
-        "v5_vminus_input": "DC 0V",
+        "V1": "DC 0.9V",
+        "V3": "DC 0V AC 1V", 
+        "V5": "DC 0V",
         "spice": """
 .ac dec 50 1 1G
 .control
@@ -56,9 +56,9 @@ echo 'UNITY_FREQ:' $&unity_freq
 """
     },
     "input_offset_and_bias": {
-        "v1_common_mode": "DC 0.9V",
-        "v3_vplus_input": "DC 0.9V",
-        "v5_vminus_input": "DC 0.9V",
+        "V1": "DC 0.9V",
+        "V3": "DC 0.9V",
+        "V5": "DC 0.9V",
         "spice": """
 .op
 .control
@@ -75,9 +75,9 @@ echo 'INPUT_OFFSET:' $&vos
 """
     },
     "slew_rate_analysis": {
-        "v1_common_mode": "DC 0.9V",
-        "v3_vplus_input": "PULSE(0.89V 0.91V 1u 10n 10n 10u 20u)",
-        "v5_vminus_input": "DC 0.9V",
+        "V1": "DC 0.9V",
+        "V3": "PULSE(0.89V 0.91V 1u 10n 10n 10u 20u)",
+        "V5": "DC 0.9V",
         "spice": """
 .tran 2n 15u
 .control
@@ -93,9 +93,9 @@ echo 'SLEW_RATE_NEG:' $&slew_neg
 """
     },
     "noise_analysis": {
-        "v1_common_mode": "DC 0.9V",
-        "v3_vplus_input": "DC 0V",
-        "v5_vminus_input": "DC 0V",
+        "V1": "DC 0.9V",
+        "V3": "DC 0V",
+        "V5": "DC 0V",
         "spice": """
 .noise v(vout) v5_vminus_input dec 30 1 1G
 .control
@@ -129,9 +129,9 @@ echo 'VOLTAGE_NOISE_1HZ:' $&voltage_noise_1hz
 """
     },
     "input_capacitance": {
-        "v1_common_mode": "DC 0.9V", 
-        "v3_vplus_input": "DC 0V AC 1V",
-        "v5_vminus_input": "DC 0V",
+        "V1": "DC 0.9V", 
+        "V3": "DC 0V AC 1V",
+        "V5": "DC 0V",
         "spice": """
 .ac dec 20 1 100k
 .control
@@ -144,9 +144,9 @@ echo 'INPUT_CAP:' $&input_cap
 """
     },
     "power_consumption": {
-        "v1_common_mode": "DC 0.9V",
-        "v3_vplus_input": "DC 0.9V",
-        "v5_vminus_input": "DC 0.9V",
+        "V1": "DC 0.9V",
+        "V3": "DC 0.9V",
+        "V5": "DC 0.9V",
         "spice": """
 .op
 .control
@@ -157,9 +157,9 @@ echo 'POWER:' $&power_val
 """
     },
     "area_calculation": {
-        "v1_common_mode": "DC 0.9V",
-        "v3_vplus_input": "DC 0.9V",
-        "v5_vminus_input": "DC 0.9V", 
+        "V1": "DC 0.9V",
+        "V3": "DC 0.9V",
+        "V5": "DC 0.9V", 
         "spice": """
 .op
 .control
@@ -240,9 +240,10 @@ if __name__ == "__main__":
         TARGETS, 
         BOUNDS,
         template_dir="template", 
-        max_iterations=1000, 
+        max_iterations=5, 
         target_precision=0.90,
-        verbose=True
+        solver_type="auto",  # Use automatic solver selection
+        verbose=False
     )
     
     print("\n=== OPTIMIZATION RESULTS ===")

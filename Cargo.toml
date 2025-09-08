@@ -9,32 +9,27 @@ repository = "https://github.com/OmarSiwy/XSchemOptimizer"
 readme = "README.md"
 
 [dependencies]
-regex = "1.0"
+# Python Interface
+pyo3 = { version = "0.26", features = ["extension-module"] }
+pythonize = "0.26"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
 
-# Parallelization
+# File I/O
+regex = "1.0"
+uuid = { version = "1.0", features = ["v4"] }
 rayon = "1.7"
+glob = "0.3.3"
+indexmap = "2.0"
 
 # Optimization libraries - keeping it simple with well-established crates
 argmin = { version = "0.10", features = ["serde1"] }
 argmin-math = { version = "0.4", features = ["vec"] }
-rand = "0.8"
-
-# File system operations
-walkdir = "2.4"
-
-# Using Python Interface
-pyo3 = { version = "0.19", features = ["extension-module"] }
-pyo3-asyncio = { version = "0.19", optional = true }
-
-# High-performance file processing
-crossbeam = "0.8"
-num_cpus = "1.16"
-indexmap = "1.9"
-glob = "0.3.3"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 name = "xschemoptimizer"
 path = "src/lib.rs"
+
+[tool.maturin]
+python-source = "python"
+module-name = "xschemoptimizer"

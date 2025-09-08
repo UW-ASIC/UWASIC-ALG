@@ -492,8 +492,8 @@ pub fn format_properties(properties: &IndexMap<String, String>) -> String {
     
     let mut formatted_pairs = Vec::new();
     for (key, value) in properties {
-        // If value contains spaces or special chars, wrap in quotes
-        if value.contains(' ') || value.contains('(') || value.contains(')') || value.contains('/') {
+        // If value contains spaces, newlines, or special chars, wrap in quotes
+        if value.contains(' ') || value.contains('\n') || value.contains('(') || value.contains(')') || value.contains('/') {
             formatted_pairs.push(format!("{}=\"{}\"", key, value));
         } else {
             formatted_pairs.push(format!("{}={}", key, value));

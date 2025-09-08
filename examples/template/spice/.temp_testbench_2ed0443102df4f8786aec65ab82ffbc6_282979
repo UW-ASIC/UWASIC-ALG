@@ -1,0 +1,38 @@
+** sch_path: /home/omare/Documents/UWASIC/XSchemOptimizer/examples/template/temp_testbench_2ed0443102df4f8786aec65ab82ffbc6.sch
+**.subckt temp_testbench_2ed0443102df4f8786aec65ab82ffbc6
+x1 ?1 vdd ?1 vout ?1 V- ?1 V+ ?1 net2 ?1 net1  temp_schemsym_2ed0443102df4f8786aec65ab82ffbc6
+**** end_element
+V1 ?1 net3 ?1 net4  DC 0.9V 
+**** end_element
+V2 ?1 vdd ?1 GND  DC 1.8V 
+**** end_element
+V4 ?1 net2 ?1 net1  DC 0.7V 
+**** end_element
+C1 ?1 vout ?1 GND  5p m=1
+**** end_element
+V3 ?1 V+ ?1 net3  DC 0.9V 
+**** end_element
+V5 ?1 V- ?1 net3  DC 0.9V 
+**** end_element
+**** begin user architecture code
+
+
+.op
+.control
+run
+* Input bias current (critical for TIA - photodiode loading)
+let ibias_pos = i(v3_vplus_input)
+let ibias_neg = -i(v5_vminus_input)
+let ibias_avg = (abs(ibias_pos) + abs(ibias_neg))/2
+echo 'INPUT_BIAS_CURRENT:' $&ibias_avg
+* Input offset voltage
+let vos = v(vplus) - v(vminus)
+echo 'INPUT_OFFSET:' $&vos
+.endc
+
+
+.lib /home/omare/.volare/sky130A/libs.tech/ngspice/sky130.lib.spice tt 
+**** end user architecture code
+**.ends
+.GLOBAL GND
+.end

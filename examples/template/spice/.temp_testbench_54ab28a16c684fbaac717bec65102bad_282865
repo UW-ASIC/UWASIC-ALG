@@ -1,0 +1,59 @@
+** sch_path: /home/omare/Documents/UWASIC/XSchemOptimizer/examples/template/temp_testbench_54ab28a16c684fbaac717bec65102bad.sch
+**.subckt temp_testbench_54ab28a16c684fbaac717bec65102bad
+x1 ?1 vdd ?1 vout ?1 V- ?1 V+ ?1 net2 ?1 net1  temp_schemsym_54ab28a16c684fbaac717bec65102bad
+**** end_element
+V1 ?1 net3 ?1 net4  DC 0.9V 
+**** end_element
+V2 ?1 vdd ?1 GND  DC 1.8V 
+**** end_element
+V4 ?1 net2 ?1 net1  DC 0.7V 
+**** end_element
+C1 ?1 vout ?1 GND  5p m=1
+**** end_element
+V3 ?1 V+ ?1 net3  DC 0V AC 1V 
+**** end_element
+V5 ?1 V- ?1 net3  DC 0V 
+**** end_element
+**** begin user architecture code
+
+
+.ac dec 50 1 1G
+.control
+run
+let dc_gain_val = vdb(vout)[0]
+echo 'DC_GAIN:' $&dc_gain_val
+* Find gain-bandwidth product (GBW)
+let gbw_freq = 0
+let dc_gain_linear = db(vout)[0]
+let target_gain = dc_gain_linear - 3
+let i = 1
+while i < length(vdb(vout))
+  if vdb(vout)[i] <= target_gain
+    let gbw_freq = frequency[i-1]
+    break
+  end
+  let i = i + 1
+end
+if gbw_freq = 0
+  let gbw_freq = frequency[length(frequency)-1]
+end
+echo 'GBW:' $&gbw_freq
+* Find unity gain frequency for phase margin calculation
+let unity_freq = 0
+let i = 0
+while i < length(vdb(vout))
+  if vdb(vout)[i] <= 0
+    let unity_freq = frequency[i]
+    break
+  end
+  let i = i + 1
+end
+echo 'UNITY_FREQ:' $&unity_freq
+.endc
+
+
+.lib /home/omare/.volare/sky130A/libs.tech/ngspice/sky130.lib.spice tt 
+**** end user architecture code
+**.ends
+.GLOBAL GND
+.end

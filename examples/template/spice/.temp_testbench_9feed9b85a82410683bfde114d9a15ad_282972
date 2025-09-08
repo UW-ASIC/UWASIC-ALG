@@ -1,0 +1,97 @@
+** sch_path: /home/omare/Documents/UWASIC/XSchemOptimizer/examples/template/temp_testbench_9feed9b85a82410683bfde114d9a15ad.sch
+**.subckt temp_testbench_9feed9b85a82410683bfde114d9a15ad
+x1 ?1 vdd ?1 vout ?1 V- ?1 V+ ?1 net2 ?1 net1  temp_schemsym_9feed9b85a82410683bfde114d9a15ad
+**** end_element
+V1 ?1 net3 ?1 net4  DC 0.9V 
+**** end_element
+V2 ?1 vdd ?1 GND  DC 1.8V 
+**** end_element
+V4 ?1 net2 ?1 net1  DC 0.7V 
+**** end_element
+C1 ?1 vout ?1 GND  5p m=1
+**** end_element
+V3 ?1 V+ ?1 net3  PULSE(0.89V 0.91V 1u 10n 10n 10u 20u) 
+**** end_element
+V5 ?1 V- ?1 net3  DC 0.9V 
+**** end_element
+**** begin user architecture code
+
+
+.tran 2n 15u
+.control
+run
+let vout_deriv = deriv(v(vout))
+let max_slew = maximum(vout_deriv)
+let min_slew = minimum(vout_deriv)
+let slew_pos = max_slew
+let slew_neg = -min_slew
+echo 'SLEW_RATE_POS:' $&slew_pos
+echo 'SLEW_RATE_NEG:' $&slew_neg
+.endc
+
+
+.lib /home/omare/.volare/sky130A/libs.tech/ngspice/sky130.lib.spice tt 
+**** end user architecture code
+**.ends
+
+* expanding   symbol:  temp_schemsym_9feed9b85a82410683bfde114d9a15ad.sym # of pins=6
+** sym_path: /home/omare/Documents/UWASIC/XSchemOptimizer/examples/template/temp_schemsym_9feed9b85a82410683bfde114d9a15ad.sym
+** sch_path: /home/omare/Documents/UWASIC/XSchemOptimizer/examples/template/temp_schemsym_9feed9b85a82410683bfde114d9a15ad.sch
+.subckt temp_schemsym_9feed9b85a82410683bfde114d9a15ad VDD Vout Vminus Vplus Vbias VSS 
+*.ipin Vplus
+*.ipin Vminus
+*.iopin VDD
+*.iopin VSS
+*.ipin Vbias
+*.opin Vout
+**** spice_prefix X
+M1 ?1 net2 ?1 Vminus ?1 net1 ?1 VSS  sky130_fd_pr__nfet_01v8 L=0.5 W=10.5
++ nf=1 ad='int((nf+1)/2) * W/nf * 0.29' as='int((nf+2)/2) * W/nf * 0.29' pd='2*int((nf+1)/2) * (W/nf + 0.29)' ps='2*int((nf+2)/2) * (W/nf + 0.29)'
++ nrd='0.29 / W' nrs='0.29 / W' sa=0 sb=0 sd=0 
++ mult=1 m=1
+**** end_element
+**** spice_prefix X
+M2 ?1 net3 ?1 Vplus ?1 net1 ?1 VSS  sky130_fd_pr__nfet_01v8 L=0.5 W=10
++ nf=1 ad='int((nf+1)/2) * W/nf * 0.29' as='int((nf+2)/2) * W/nf * 0.29' pd='2*int((nf+1)/2) * (W/nf + 0.29)' ps='2*int((nf+2)/2) * (W/nf + 0.29)'
++ nrd='0.29 / W' nrs='0.29 / W' sa=0 sb=0 sd=0 
++ mult=1 m=1
+**** end_element
+**** spice_prefix X
+M3 ?1 net2 ?1 net2 ?1 VDD ?1 VDD  sky130_fd_pr__pfet_01v8 L=0.5 W=5
++ nf=1 ad='int((nf+1)/2) * W/nf * 0.29' as='int((nf+2)/2) * W/nf * 0.29' pd='2*int((nf+1)/2) * (W/nf + 0.29)' ps='2*int((nf+2)/2) * (W/nf + 0.29)'
++ nrd='0.29 / W' nrs='0.29 / W' sa=0 sb=0 sd=0 
++ mult=1 m=1
+**** end_element
+**** spice_prefix X
+M4 ?1 net3 ?1 net2 ?1 VDD ?1 VDD  sky130_fd_pr__pfet_01v8 L=0.5 W=5
++ nf=1 ad='int((nf+1)/2) * W/nf * 0.29' as='int((nf+2)/2) * W/nf * 0.29' pd='2*int((nf+1)/2) * (W/nf + 0.29)' ps='2*int((nf+2)/2) * (W/nf + 0.29)'
++ nrd='0.29 / W' nrs='0.29 / W' sa=0 sb=0 sd=0 
++ mult=1 m=1
+**** end_element
+**** spice_prefix X
+M5 ?1 net1 ?1 Vbias ?1 VSS ?1 VSS  sky130_fd_pr__nfet_01v8 L=0.5 W=20
++ nf=1 ad='int((nf+1)/2) * W/nf * 0.29' as='int((nf+2)/2) * W/nf * 0.29' pd='2*int((nf+1)/2) * (W/nf + 0.29)' ps='2*int((nf+2)/2) * (W/nf + 0.29)'
++ nrd='0.29 / W' nrs='0.29 / W' sa=0 sb=0 sd=0 
++ mult=1 m=1
+**** end_element
+**** spice_prefix X
+M6 ?1 Vout ?1 net3 ?1 VDD ?1 VDD  sky130_fd_pr__pfet_01v8 L=0.5 W=15
++ nf=1 ad='int((nf+1)/2) * W/nf * 0.29' as='int((nf+2)/2) * W/nf * 0.29' pd='2*int((nf+1)/2) * (W/nf + 0.29)' ps='2*int((nf+2)/2) * (W/nf + 0.29)'
++ nrd='0.29 / W' nrs='0.29 / W' sa=0 sb=0 sd=0 
++ mult=1 m=1
+**** end_element
+**** spice_prefix X
+C1 ?1 Vout ?1 net3  sky130_fd_pr__cap_mim_m3_1 W=1 L=1 MF=1 m=1
+**** end_element
+**** spice_prefix X
+M7 ?1 Vout ?1 Vbias ?1 VSS ?1 VSS  sky130_fd_pr__nfet_01v8 L=0.3 W=1
++ nf=1 ad='int((nf+1)/2) * W/nf * 0.29' as='int((nf+2)/2) * W/nf * 0.29' pd='2*int((nf+1)/2) * (W/nf + 0.29)' ps='2*int((nf+2)/2) * (W/nf + 0.29)'
++ nrd='0.29 / W' nrs='0.29 / W' sa=0 sb=0 sd=0 
++ mult=1 m=1
+**** end_element
+.ends
+
+.GLOBAL GND
+.GLOBAL VDD
+.GLOBAL VSS
+.end
