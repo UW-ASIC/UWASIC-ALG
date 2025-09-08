@@ -117,33 +117,3 @@ jobs:
       with:
         password: ${{ secrets.PYPI_API_TOKEN }}
         packages-dir: dist/
-
-  publish-test-pypi:
-    name: Publish to Test PyPI
-    needs: [build, test, create-source-dist]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
-    environment:
-      name: test-pypi
-      url: https://test.pypi.org/project/xschemoptimizer/
-    permissions:
-      id-token: write
-    steps:
-    - name: Download all wheels
-      uses: actions/download-artifact@v4
-      with:
-        path: dist-download/
-
-    - name: Flatten downloaded artifacts
-      run: |
-        mkdir -p dist
-        find dist-download -name "*.whl" -exec cp {} dist/ \;
-        find dist-download -name "*.tar.gz" -exec cp {} dist/ \;
-        ls -la dist/
-
-    - name: Publish to Test PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        password: ${{ secrets.TEST_PYPI_API_TOKEN }}
-        repository-url: https://test.pypi.org/legacy/
-        packages-dir: dist/
