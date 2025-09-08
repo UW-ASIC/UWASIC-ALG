@@ -17,7 +17,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    # Set up Python and Rust instead of Nix for better cross-platform compatibility
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -30,9 +29,9 @@ jobs:
       run: pip install maturin
 
     - name: Build wheels with full optimizations
-      run: maturin build --release --strip --out dist
+      run: maturin build --release --out dist
       env:
-        RUSTFLAGS: "-C opt-level=3 -C codegen-units=1 -C lto=fat"
+        RUSTFLAGS: "-C opt-level=3 -C codegen-units=1"
 
     - name: Upload wheels as artifacts
       uses: actions/upload-artifact@v4
@@ -70,14 +69,19 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install Nix
-      uses: cachix/install-nix-action@v27
+    - name: Set up Python
+      uses: actions/setup-python@v4
       with:
-        github_access_token: ${{ secrets.GITHUB_TOKEN }}
-        nix_path: nixpkgs=channel:nixos-24.05
+        python-version: '3.11'
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install maturin
+      run: pip install maturin
 
     - name: Build source distribution
-      run: nix-shell --pure --run "maturin sdist --out dist"
+      run: maturin sdist --out dist
 
     - name: Upload source distribution
       uses: actions/upload-artifact@v4
@@ -94,7 +98,7 @@ jobs:
       name: pypi
       url: https://pypi.org/project/xschemoptimizer/
     permissions:
-      id-token: write  # For trusted publishing
+      id-token: write
     steps:
     - name: Download all wheels
       uses: actions/download-artifact@v4
@@ -123,7 +127,7 @@ jobs:
       name: test-pypi
       url: https://test.pypi.org/project/xschemoptimizer/
     permissions:
-      id-token: write  # For trusted publishing
+      id-token: write
     steps:
     - name: Download all wheels
       uses: actions/download-artifact@v4
