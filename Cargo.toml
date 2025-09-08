@@ -29,7 +29,3 @@ argmin-math = { version = "0.4", features = ["vec"] }
 crate-type = ["cdylib", "rlib"]
 name = "xschemoptimizer"
 path = "src/lib.rs"
-
-[tool.maturin]
-python-source = "python"
-module-name = "xschemoptimizer"
