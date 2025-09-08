@@ -1,6 +1,10 @@
 # XSchemOptimizer
 
-Circuit parameter optimization library for XSchem analog design workflows.
+Usage:
+```
+pip install xschemoptimizer
+# refer to examples/
+```
 
 ## Commands
 
