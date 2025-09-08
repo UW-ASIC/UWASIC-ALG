@@ -259,14 +259,10 @@ impl OptimizationProblem {
                 // Copy the base schematic to temp schematic (already updated with current parameters)
                 std::fs::copy(&base_schematic_file, &temp_schematic)
                     .map_err(|e| format!("Failed to copy schematic to {}: {}", temp_schematic.display(), e))?;
-                std::fs::set_permissions(&temp_schematic, std::fs::Permissions::from_mode(0o666))
-                    .map_err(|e| format!("Failed to set permissions on temp_schematic: {}", e))?;
 
                 // Copy the base symbol with the same name as the temp schematic
                 std::fs::copy(&base_symbol_file, &temp_symbol)
                     .map_err(|e| format!("Failed to copy symbol to {}: {}", temp_symbol.display(), e))?;
-                std::fs::set_permissions(&temp_symbol, std::fs::Permissions::from_mode(0o666))
-                    .map_err(|e| format!("Failed to set permissions on temp_schematic: {}", e))?;
 
                 // Create temporary testbench using XSchemIO
                 let mut testbench_xschem = XSchemIO::load(&base_testbench_file, self.verbose)
@@ -302,8 +298,6 @@ impl OptimizationProblem {
                 // Save the updated testbench
                 testbench_xschem.save(temp_testbench.to_str().unwrap())
                     .map_err(|e| format!("Failed to write temp testbench: {}", e))?;
-                std::fs::set_permissions(&temp_testbench, std::fs::Permissions::from_mode(0o666))
-                    .map_err(|e| format!("Failed to set permissions on temp_schematic: {}", e))?;
 
                 // Create SpiceInterface with shared configuration
                 let spice_interface = SpiceInterface::new(
