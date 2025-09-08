@@ -74,6 +74,7 @@ jobs:
       uses: cachix/install-nix-action@v27
       with:
         github_access_token: ${{ secrets.GITHUB_TOKEN }}
+        nix_path: nixpkgs=channel:nixos-24.05
 
     - name: Build source distribution
       run: nix-shell --pure --run "maturin sdist --out dist"
