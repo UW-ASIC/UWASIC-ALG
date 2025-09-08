@@ -9,7 +9,6 @@ use rayon::prelude::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use std::os::unix::fs::PermissionsExt;
 use uuid::Uuid;
 use crate::{vprintln, safe_println};
 
