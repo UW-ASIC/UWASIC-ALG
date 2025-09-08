@@ -1,5 +1,4 @@
 name: Build and Publish to PyPI
-
 on:
   push:
     tags:
@@ -15,20 +14,25 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install Nix
-      uses: cachix/install-nix-action@v24
+    # Set up Python and Rust instead of Nix for better cross-platform compatibility
+    - name: Set up Python
+      uses: actions/setup-python@v4
       with:
-        github_access_token: ${{ secrets.GITHUB_TOKEN }}
+        python-version: '3.11'
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install maturin
+      run: pip install maturin
 
     - name: Build wheels with full optimizations
-      run: |
-        nix-shell --run "maturin build --release --strip --out dist"
+      run: maturin build --release --strip --out dist
       env:
-        RUSTFLAGS: "-C target-cpu=native -C opt-level=3 -C codegen-units=1 -C lto=fat"
+        RUSTFLAGS: "-C opt-level=3 -C codegen-units=1 -C lto=fat"
 
     - name: Upload wheels as artifacts
       uses: actions/upload-artifact@v4
@@ -40,14 +44,13 @@ jobs:
     name: Test built wheels
     needs: build
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install Nix
-      uses: cachix/install-nix-action@v24
+    - name: Set up Python
+      uses: actions/setup-python@v4
       with:
-        github_access_token: ${{ secrets.GITHUB_TOKEN }}
+        python-version: '3.11'
 
     - name: Download Linux wheels
       uses: actions/download-artifact@v4
@@ -57,27 +60,23 @@ jobs:
 
     - name: Test wheel installation and import
       run: |
-        nix-shell --run "
-          pip install dist/*.whl
-          python -c 'import xschemoptimizer; print(\"Import successful\")'
-          python -c 'from xschemoptimizer import optimize_circuit; print(\"Function import successful\")'
-        "
+        pip install dist/*.whl
+        python -c 'import xschemoptimizer; print("Import successful")'
+        python -c 'from xschemoptimizer import optimize_circuit; print("Function import successful")'
 
   create-source-dist:
     name: Create source distribution
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v4
 
     - name: Install Nix
-      uses: cachix/install-nix-action@v24
+      uses: cachix/install-nix-action@v27
       with:
         github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Build source distribution
-      run: |
-        nix-shell --run "maturin sdist --out dist"
+      run: nix-shell --pure --run "maturin sdist --out dist"
 
     - name: Upload source distribution
       uses: actions/upload-artifact@v4
@@ -93,7 +92,8 @@ jobs:
     environment:
       name: pypi
       url: https://pypi.org/project/xschemoptimizer/
-
+    permissions:
+      id-token: write  # For trusted publishing
     steps:
     - name: Download all wheels
       uses: actions/download-artifact@v4
@@ -117,11 +117,12 @@ jobs:
     name: Publish to Test PyPI
     needs: [build, test, create-source-dist]
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'  # Only on manual trigger
+    if: github.event_name == 'workflow_dispatch'
     environment:
       name: test-pypi
       url: https://test.pypi.org/project/xschemoptimizer/
-
+    permissions:
+      id-token: write  # For trusted publishing
     steps:
     - name: Download all wheels
       uses: actions/download-artifact@v4

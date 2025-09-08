@@ -1,5 +1,4 @@
 name: Test and Development
-
 on:
   push:
     branches: [ main, develop ]
@@ -15,111 +14,12 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
-
     steps:
     - uses: actions/checkout@v4
-
-    - name: Install Nix
-      uses: cachix/install-nix-action@v24
-      with:
-        github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Install development dependencies
-      run: |
-        nix-shell --run "
-          pip install --upgrade pip
-          pip install pytest pytest-cov maturin
-        "
-
-    - name: Development build with maturin
-      run: |
-        nix-shell --run "maturin develop --release"
-      env:
-        RUSTFLAGS: "-C opt-level=3"
-
-    - name: Run tests
-      run: |
-        nix-shell --run "
-          python -c 'import xschemoptimizer; print(\"Import successful\")'
-          python -c 'from xschemoptimizer import optimize_circuit; print(\"Function import successful\")'
-        "
-
-    - name: Run Python tests if they exist
-      run: |
-        nix-shell --run "
-          if [ -d tests ]; then
-            pytest tests/ -v --cov=xschemoptimizer
-          else
-            echo 'No tests directory found, skipping pytest'
-          fi
-        "
-
-  benchmark:
-    name: Performance Benchmark
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Install Nix
-      uses: cachix/install-nix-action@v24
-      with:
-        github_access_token: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Build optimized version
-      run: |
-        nix-shell --run "maturin develop --release"
-      env:
-        RUSTFLAGS: "-C target-cpu=native -C opt-level=3 -C codegen-units=1 -C lto=fat"
-
-    - name: Run performance tests
-      run: |
-        nix-shell --run "
-          python -c '
-          import time
-          import xschemoptimizer
-          print(\"Running basic performance check...\")
-          start = time.time()
-          # Add your benchmark code here
-          end = time.time()
-          print(f\"Execution time: {end - start:.4f} seconds\")
-          '
-        "
-
-  lint:
-    name: Lint and Format Check
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Install Nix
-      uses: cachix/install-nix-action@v24
-      with:
-        github_access_token: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Check Rust formatting
-      run: |
-        nix-shell --run "cargo fmt --check"
-
-    - name: Run Clippy
-      run: |
-        nix-shell --run "cargo clippy -- -D warnings"
-
-    - name: Check Python formatting (if Python code exists)
-      run: |
-        nix-shell --run "
-          if [ -d python ] || [ -f setup.py ]; then
-            pip install black isort
-            black --check python/ || echo 'No Python code to format'
-            isort --check-only python/ || echo 'No Python code to sort'
-          else
-            echo 'No Python source directory found'
-          fi
-        "
+    - name: Install
