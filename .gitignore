@@ -1,0 +1,7 @@
+/target
+.pytest_cache
+.venv
+__pycache__
+
+Cargo.lock
+xschemrc
