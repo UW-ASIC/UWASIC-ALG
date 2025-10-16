@@ -25,6 +25,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ngspice libngspice0-dev
 
+      - name: Install cross-compilation tools for aarch64
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -32,6 +37,15 @@ jobs:
 
       - name: Install maturin
         run: pip install maturin
+
+      - name: Configure cross-compilation linker
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          mkdir -p .cargo
+          cat >> .cargo/config.toml << 'EOF'
+          [target.aarch64-unknown-linux-gnu]
+          linker = "aarch64-linux-gnu-gcc"
+          EOF
 
       - name: Build wheels
         run: |
@@ -65,6 +79,11 @@ jobs:
       - name: Install ngspice
         run: |
           brew install ngspice
+
+      - name: Set ngspice paths
+        run: |
+          echo "CPATH=$(brew --prefix ngspice)/include:$CPATH" >> $GITHUB_ENV
+          echo "LIBRARY_PATH=$(brew --prefix ngspice)/lib:$LIBRARY_PATH" >> $GITHUB_ENV
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -100,9 +119,22 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install ngspice
+      - name: Install LLVM (for clang/libclang)
         run: |
-          choco install ngspice
+          choco install llvm
+
+      - name: Download and setup ngspice
+        shell: powershell
+        run: |
+          # Download ngspice
+          $ngspiceUrl = "https://sourceforge.net/projects/ngspice/files/ng-spice-rework/43/ngspice-43_dll_64.zip/download"
+          Invoke-WebRequest -Uri $ngspiceUrl -OutFile ngspice.zip
+          Expand-Archive -Path ngspice.zip -DestinationPath C:\ngspice
+
+          # Set environment variables
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "NGSPICE_INCLUDE=C:\ngspice\include" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "NGSPICE_LIB=C:\ngspice\lib" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable

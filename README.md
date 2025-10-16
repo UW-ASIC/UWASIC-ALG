@@ -101,7 +101,3 @@ Supported relationships:
 ```bash
 git tag v0.0.* && git push origin v0.0.*
 ```
-
-1. Add PYPI_API_TOKEN secret to your GitHub repository settings
-2. Test by pushing a tag: git tag v0.1.0 && git push origin v0.1.0
-3. Note: Users will still need xschem installed separately on their systems

@@ -7,8 +7,13 @@ fn main() {
     // Link to ngspice shared library
     println!("cargo:rustc-link-lib=ngspice");
 
-    // Generate bindings
-    let bindings = bindgen::Builder::default()
+    // Add library search path if specified
+    if let Ok(lib_path) = env::var("NGSPICE_LIB") {
+        println!("cargo:rustc-link-search=native={}", lib_path);
+    }
+
+    // Build bindgen with proper clang args
+    let mut builder = bindgen::Builder::default()
         .header("include/ngspice.h")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .allowlist_function("ngSpice_Init")
@@ -26,7 +31,15 @@ fn main() {
         .allowlist_type("vecvalues")
         .allowlist_type("vecvaluesall")
         .allowlist_type("vecinfo")
-        .allowlist_type("vecinfoall")
+        .allowlist_type("vecinfoall");
+
+    // Add include path if specified (for Windows/custom installs)
+    if let Ok(include_path) = env::var("NGSPICE_INCLUDE") {
+        builder = builder.clang_arg(format!("-I{}", include_path));
+    }
+
+    // Generate bindings
+    let bindings = builder
         .generate()
         .expect("Unable to generate bindings");
 
