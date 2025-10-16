@@ -172,6 +172,23 @@ impl Optimizer {
             );
         }
 
+        // Initialize parameters with initial values
+        let initial_params = problem.initial_params().to_vec();
+        problem
+            .update_parameters(&initial_params)
+            .map_err(|e| PyValueError::new_err(e))?;
+
+        // Reset ngspice after applying initial parameters
+        {
+            let ngspice = problem.ngspice.borrow();
+            ngspice.command("reset")
+                .map_err(|e| PyValueError::new_err(format!("Failed to reset ngspice: {}", e)))?;
+        }
+
+        if self.verbose {
+            println!("✓ Initial parameters applied to circuit");
+        }
+
         // Create callback for tracking/display
         let param_names: Vec<String> = params_native.iter().map(|p| p.name.clone()).collect();
         let mut callback = CircuitOptimizationCallback::new(
@@ -301,29 +318,5 @@ impl Optimizer {
             // Assume SPICE file
             Ok(circuit_path.to_string_lossy().to_string())
         }
-    }
-
-    fn validate_constraints(
-        &self,
-        parameters: Vec<Py<Parameter>>,
-        constraints: Vec<Py<ParameterConstraint>>,
-        py: Python,
-    ) -> PyResult<()> {
-        let params_native: Vec<Parameter> =
-            parameters.iter().map(|p| p.borrow(py).clone()).collect();
-
-        let mut constraints_native: Vec<ParameterConstraint> =
-            constraints.iter().map(|c| c.borrow(py).clone()).collect();
-
-        crate::core::validate_constraints(&mut constraints_native, &params_native)
-            .map_err(|e| PyValueError::new_err(e))?;
-
-        for (py_constraint, native_constraint) in constraints.iter().zip(constraints_native.iter())
-        {
-            let mut borrowed = py_constraint.borrow_mut(py);
-            borrowed.compiled = native_constraint.compiled.clone();
-        }
-
-        Ok(())
     }
 }

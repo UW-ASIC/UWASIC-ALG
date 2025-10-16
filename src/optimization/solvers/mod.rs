@@ -39,48 +39,41 @@ pub fn select_solver(
         0.0
     };
     
-    // Decision logic
+    // Decision logic - prefer gradient-free methods for circuit optimization (noisy, non-convex)
     let (solver, reason): (Box<dyn Solver>, String) = match (num_params, has_tight_bounds, parameter_scale_variance, has_constraints) {
-        // Small problems (1-3 params) with tight bounds -> Adaptive Newton
-        (n, true, _, _) if n <= 3 => {
+        // Small problems (1-2 params) with very tight bounds -> Newton as last resort
+        (n, true, _, _) if n <= 2 && avg_range < 0.1 => {
             (
                 Box::new(NewtonOptimizer::new(max_iterations, precision)),
-                format!("Auto: Small problem ({} params) with tight bounds → Newton (fast gradient-based)", n)
+                format!("Auto: Tiny problem ({} params, range {:.3}) → Newton (fast for smooth functions)", n, avg_range)
             )
         },
-        
-        // Medium problems (4-8 params) with uniform scaling -> PSO
-        (n, _, var, false) if n >= 4 && n <= 8 && var < 1.0 => {
-            let mut pso = ParticleOptimizer::new(max_iterations, precision);
-            pso = pso.with_population_size(15 + n * 2);  // Scale swarm with dimension
+
+        // Small to medium problems (1-8 params) -> PSO (best for circuit optimization)
+        (n, _, _, _) if n <= 8 => {
+            let pop_size = (10 + n * 3).min(30);  // Scale population: 10-30 particles
+            let pso = ParticleOptimizer::new(max_iterations, precision)
+                .with_population_size(pop_size);
             (
                 Box::new(pso),
-                format!("Auto: Medium problem ({} params, uniform scaling) → PSO (efficient exploration)", n)
+                format!("Auto: {} params → PSO (pop={}, robust for noisy circuits)", n, pop_size)
             )
         },
-        
+
         // Large problems (9+ params) or poorly scaled -> CMA-ES
-        (n, _, var, _) if n >= 9 || var > 1.0 => {
+        (n, _, var, _) if n >= 9 || var > 1.5 => {
             (
                 Box::new(CMAESOptimizer::new(max_iterations, precision)),
-                format!("Auto: Large/complex problem ({} params, scale variance: {:.2}) → CMA-ES (adaptive)", n, var)
+                format!("Auto: Large problem ({} params, scale var: {:.2}) → CMA-ES (adaptive)", n, var)
             )
         },
-        
-        // Constrained problems -> PSO (handles constraints naturally)
-        (n, _, _, true) => {
+
+        // Default fallback -> PSO (most robust for circuits)
+        (n, _, _, _) => {
             (
                 Box::new(ParticleOptimizer::new(max_iterations, precision)
                     .with_population_size(20)),
-                format!("Auto: Constrained problem ({} params) → PSO (constraint handling)", n)
-            )
-        },
-        
-        // Default fallback -> PSO (robust general-purpose)
-        (n, _, _, _) => {
-            (
-                Box::new(ParticleOptimizer::new(max_iterations, precision)),
-                format!("Auto: General problem ({} params) → PSO (robust default)", n)
+                format!("Auto: {} params → PSO (default, handles noise well)", n)
             )
         }
     };

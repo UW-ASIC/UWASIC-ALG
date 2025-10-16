@@ -1,4 +1,3 @@
-pub mod netlist;
 pub mod ngspice;
 pub mod xschem;
 

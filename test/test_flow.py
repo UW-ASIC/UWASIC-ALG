@@ -15,26 +15,31 @@ from typing import List
 # =============================================================================
 
 parameters: List[Parameter] = [
-    # Differential Pair (M1, M2)
-    Parameter(name="XM1_W", value=1.0, min_val=0.42, max_val=10.0),
-    Parameter(name="XM1_L", value=0.5, min_val=0.15, max_val=2.0),
-    Parameter(name="XM2_W", value=1.0, min_val=0.42, max_val=10.0),
-    Parameter(name="XM2_L", value=0.5, min_val=0.15, max_val=2.0),
-    # Active Load (M3, M4)
-    Parameter(name="XM3_W", value=2.0, min_val=0.42, max_val=10.0),
-    Parameter(name="XM3_L", value=0.5, min_val=0.15, max_val=2.0),
-    Parameter(name="XM4_W", value=2.0, min_val=0.42, max_val=10.0),
-    Parameter(name="XM4_L", value=0.5, min_val=0.15, max_val=2.0),
-    # Tail Current Source (M5)
-    Parameter(name="XM5_W", value=2.0, min_val=0.42, max_val=10.0),
-    Parameter(name="XM5_L", value=1.0, min_val=0.5, max_val=2.0),
-    # Output Stage (M6, M7)
-    Parameter(name="XM6_W", value=4.0, min_val=0.42, max_val=20.0),
-    Parameter(name="XM6_L", value=0.5, min_val=0.15, max_val=2.0),
-    Parameter(name="XM7_W", value=2.0, min_val=0.42, max_val=10.0),
-    Parameter(name="XM7_L", value=1.0, min_val=0.5, max_val=2.0),
-    # Compensation Capacitor
-    Parameter(name="C1_value", value=2.0, min_val=1.0, max_val=5.0),
+    # Differential Pair (M1, M2) - NFET
+    # Moderate W for good gm, longer L for matching
+    Parameter(name="XM1_W", value=5.0, min_val=0.42, max_val=50.0),  # um
+    Parameter(name="XM1_L", value=1.0, min_val=0.15, max_val=10.0),  # um
+    Parameter(name="XM2_W", value=5.0, min_val=0.42, max_val=50.0),  # um
+    Parameter(name="XM2_L", value=1.0, min_val=0.15, max_val=10.0),  # um
+    # Active Load (M3, M4) - PFET
+    # Wider for current mirror, longer L for high output impedance
+    Parameter(name="XM3_W", value=8.0, min_val=0.42, max_val=50.0),  # um
+    Parameter(name="XM3_L", value=1.5, min_val=0.15, max_val=10.0),  # um
+    Parameter(name="XM4_W", value=8.0, min_val=0.42, max_val=50.0),  # um
+    Parameter(name="XM4_L", value=1.5, min_val=0.15, max_val=10.0),  # um
+    # Tail Current Source (M5) - NFET
+    # Moderate W, longer L for stable current source
+    Parameter(name="XM5_W", value=4.0, min_val=0.42, max_val=50.0),  # um
+    Parameter(name="XM5_L", value=2.0, min_val=0.15, max_val=10.0),  # um
+    # Output Stage (M6, M7) - PFET and NFET
+    # M6 (PFET): Large for high drive, moderate L
+    Parameter(name="XM6_W", value=20.0, min_val=0.42, max_val=100.0),  # um
+    Parameter(name="XM6_L", value=1.0, min_val=0.15, max_val=10.0),  # um
+    # M7 (NFET): Half of M6 for proper biasing, longer L
+    Parameter(name="XM7_W", value=10.0, min_val=0.42, max_val=50.0),  # um
+    Parameter(name="XM7_L", value=2.0, min_val=0.15, max_val=10.0),  # um
+    # Compensation Capacitor - typical miller cap
+    Parameter(name="C1_value", value=3.0, min_val=0.5, max_val=20.0),  # pF
 ]
 
 # =============================================================================
@@ -45,17 +50,10 @@ constraints: List[ParameterConstraint] = [
     # Differential pair matching
     ParameterConstraint(
         target_param=parameters[0],  # XM1_W
-        source_params=[parameters[2]],  # XM2_W
-        expression="XM2_W",
+        source_params=[parameters[2], parameters[1], parameters[3]],  # XM2_W
+        expression="XM2_W * (XM1_L / XM2_L)",  # XM1_W = XM2_W * (XM1_L / XM2_L)
         relationship=RelationshipType.Equals,
         description="M1.W = M2.W (differential pair matching)",
-    ),
-    ParameterConstraint(
-        target_param=parameters[1],  # XM1_L
-        source_params=[parameters[3]],  # XM2_L
-        expression="XM2_L",
-        relationship=RelationshipType.Equals,
-        description="M1.L = M2.L (differential pair matching)",
     ),
 ]
 
@@ -92,6 +90,13 @@ targets: List[Target] = [
         mode=TargetMode.Max,
         unit="W",
     ),
+    Target(
+        metric="AREA",
+        value=50e-12,  # 50 um^2 maximum
+        weight=1.5,
+        mode=TargetMode.Max,
+        unit="m^2",
+    ),
 ]
 
 # =============================================================================
@@ -106,7 +111,11 @@ tests: List[Test] = [
         name="dc_gain_typical",
         environment=[
             Environment(name="temp", value="27"),
-            Environment(name="vdd", value="1.8"),
+            Environment(name="V1", value="DC 0.9V"),
+            Environment(name="V2", value="DC 1.8V"),
+            Environment(name="V3", value="DC 0V AC 1mV"),
+            Environment(name="V4", value="DC 0.7V"),
+            Environment(name="V5", value="DC 0V AC 1mV"),
         ],
         spice_code="""
 .ac dec 100 1 1G
@@ -122,7 +131,11 @@ print dc_gain_val
         name="gbw_typical",
         environment=[
             Environment(name="temp", value="27"),
-            Environment(name="vdd", value="1.8"),
+            Environment(name="V1", value="DC 0.9V"),
+            Environment(name="V2", value="DC 1.8V"),
+            Environment(name="V3", value="DC 0V AC 1mV"),
+            Environment(name="V4", value="DC 0.7V"),
+            Environment(name="V5", value="DC 0V AC 1mV"),
         ],
         spice_code="""
 .ac dec 100 1 1G
@@ -139,7 +152,11 @@ print gbw_val
         name="phase_margin_typical",
         environment=[
             Environment(name="temp", value="27"),
-            Environment(name="vdd", value="1.8"),
+            Environment(name="V1", value="DC 0.9V"),
+            Environment(name="V2", value="DC 1.8V"),
+            Environment(name="V3", value="DC 0V AC 1mV"),
+            Environment(name="V4", value="DC 0.7V"),
+            Environment(name="V5", value="DC 0V AC 1mV"),
         ],
         spice_code="""
 .ac dec 100 1 1G
@@ -156,7 +173,11 @@ print phase_margin_val
         name="power_typical",
         environment=[
             Environment(name="temp", value="27"),
-            Environment(name="vdd", value="1.8"),
+            Environment(name="V1", value="DC 0.9V"),
+            Environment(name="V2", value="DC 1.8V"),
+            Environment(name="V3", value="DC 0V AC 1mV"),
+            Environment(name="V4", value="DC 0.7V"),
+            Environment(name="V5", value="DC 0V AC 1mV"),
         ],
         spice_code="""
 .op
@@ -164,6 +185,34 @@ let power_val = v(vdd) * (-i(V2))
 print power_val
 """,
         description="Measure DC power (27C, VDD=1.8V)",
+    ),
+    # =========================================================================
+    # Test 5: Area Calculation
+    # =========================================================================
+    Test(
+        name="area_calculation",
+        environment=[
+            Environment(name="temp", value="27"),
+            Environment(name="V1", value="DC 0.9V"),
+            Environment(name="V2", value="DC 1.8V"),
+            Environment(name="V3", value="DC 0V AC 1mV"),
+            Environment(name="V4", value="DC 0.7V"),
+            Environment(name="V5", value="DC 0V AC 1mV"),
+        ],
+        spice_code="""
+.op
+* Calculate total transistor area (W*L for all transistors)
+let area_m1 = @m.x1.xm1.msky130_fd_pr__nfet_01v8[w] * @m.x1.xm1.msky130_fd_pr__nfet_01v8[l]
+let area_m2 = @m.x1.xm2.msky130_fd_pr__nfet_01v8[w] * @m.x1.xm2.msky130_fd_pr__nfet_01v8[l]
+let area_m3 = @m.x1.xm3.msky130_fd_pr__pfet_01v8[w] * @m.x1.xm3.msky130_fd_pr__pfet_01v8[l]
+let area_m4 = @m.x1.xm4.msky130_fd_pr__pfet_01v8[w] * @m.x1.xm4.msky130_fd_pr__pfet_01v8[l]
+let area_m5 = @m.x1.xm5.msky130_fd_pr__nfet_01v8[w] * @m.x1.xm5.msky130_fd_pr__nfet_01v8[l]
+let area_m6 = @m.x1.xm6.msky130_fd_pr__pfet_01v8[w] * @m.x1.xm6.msky130_fd_pr__pfet_01v8[l]
+let area_m7 = @m.x1.xm7.msky130_fd_pr__nfet_01v8[w] * @m.x1.xm7.msky130_fd_pr__nfet_01v8[l]
+let area_val = area_m1 + area_m2 + area_m3 + area_m4 + area_m5 + area_m6 + area_m7
+print area_val
+""",
+        description="Calculate total transistor area (sum of W*L)",
     ),
 ]
 
@@ -186,7 +235,7 @@ if __name__ == "__main__":
         circuit="OpAmp_tb.sch",
         template="test/template",
         solver="pso",
-        max_iterations=100,
+        max_iterations=3,
         precision=1e-6,
         verbose=True,
     )

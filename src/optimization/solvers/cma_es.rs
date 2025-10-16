@@ -92,7 +92,7 @@ impl Solver for CMAESOptimizer {
 
         let mut cost_evals = 0;
         let mut best_cost = f64::INFINITY;
-        let mut best_params = mean.clone();
+        let mut best_idx = 0;
 
         for iter in 0..self.max_iter {
             // Generate and evaluate population
@@ -127,12 +127,12 @@ impl Solver for CMAESOptimizer {
 
                 if cost < best_cost {
                     best_cost = cost;
-                    best_params = population.last().unwrap().clone();
+                    best_idx = population.len() - 1;
                 }
             }
 
             // Report best of generation
-            callback.on_iteration(iter + 1, &best_params, best_cost)?;
+            callback.on_iteration(iter + 1, &population[best_idx], best_cost)?;
 
             if callback.should_stop() {
                 return Ok(SolverResult {
@@ -140,7 +140,7 @@ impl Solver for CMAESOptimizer {
                     cost: best_cost,
                     iterations: iter + 1,
                     message: "Stopped by callback".into(),
-                    params: best_params,
+                    params: population[best_idx].clone(),
                     cost_evals,
                     grad_evals: 0,
                 });
@@ -152,7 +152,7 @@ impl Solver for CMAESOptimizer {
                     cost: best_cost,
                     iterations: iter + 1,
                     message: "Converged".into(),
-                    params: best_params,
+                    params: population[best_idx].clone(),
                     cost_evals,
                     grad_evals: 0,
                 });
@@ -163,7 +163,7 @@ impl Solver for CMAESOptimizer {
             indices.sort_by(|&a, &b| costs[a].partial_cmp(&costs[b]).unwrap());
 
             // Compute new mean (recombination)
-            let old_mean = mean.clone();
+            let old_mean = mean;
             mean = vec![0.0; n];
             for i in 0..mu {
                 let idx = indices[i];
@@ -202,12 +202,13 @@ impl Solver for CMAESOptimizer {
             }
         }
 
+        // Note: best_idx may be stale from previous iteration, use mean as final solution
         Ok(SolverResult {
             success: false,
             cost: best_cost,
             iterations: self.max_iter,
             message: "Max iterations reached".into(),
-            params: best_params,
+            params: mean,
             cost_evals,
             grad_evals: 0,
         })

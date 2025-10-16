@@ -111,7 +111,7 @@ impl Solver for ParticleOptimizer {
         let mut personal_best_positions = particles.clone();
         let mut personal_best_costs = vec![f64::INFINITY; self.population_size];
 
-        let mut global_best_position = problem.initial_params().to_vec();
+        let mut global_best_idx = 0;
         let mut global_best_cost = f64::INFINITY;
 
         let mut cost_evals = 0;
@@ -135,18 +135,18 @@ impl Solver for ParticleOptimizer {
                 // Update personal best
                 if cost < personal_best_costs[p] {
                     personal_best_costs[p] = cost;
-                    personal_best_positions[p] = particles[p].clone();
+                    personal_best_positions[p].copy_from_slice(&particles[p]);
                 }
 
                 // Update global best
                 if cost < global_best_cost {
                     global_best_cost = cost;
-                    global_best_position = particles[p].clone();
+                    global_best_idx = p;
                 }
             }
 
             // Report progress using the global best
-            callback.on_iteration(iter + 1, &global_best_position, global_best_cost)?;
+            callback.on_iteration(iter + 1, &personal_best_positions[global_best_idx], global_best_cost)?;
 
             // Check for early termination
             if callback.should_stop() {
@@ -155,7 +155,7 @@ impl Solver for ParticleOptimizer {
                     cost: global_best_cost,
                     iterations: iter + 1,
                     message: "Stopped by callback".into(),
-                    params: global_best_position,
+                    params: personal_best_positions[global_best_idx].clone(),
                     cost_evals,
                     grad_evals: 0,
                 });
@@ -168,7 +168,7 @@ impl Solver for ParticleOptimizer {
                     cost: global_best_cost,
                     iterations: iter + 1,
                     message: "Converged".into(),
-                    params: global_best_position,
+                    params: personal_best_positions[global_best_idx].clone(),
                     cost_evals,
                     grad_evals: 0,
                 });
@@ -183,7 +183,7 @@ impl Solver for ParticleOptimizer {
                         cost: global_best_cost,
                         iterations: iter + 1,
                         message: "Stagnated".into(),
-                        params: global_best_position,
+                        params: personal_best_positions[global_best_idx].clone(),
                         cost_evals,
                         grad_evals: 0,
                     });
@@ -201,7 +201,7 @@ impl Solver for ParticleOptimizer {
                     // PSO velocity update equation
                     velocities[p][i] = self.inertia * velocities[p][i]
                         + self.cognitive * r1 * (personal_best_positions[p][i] - particles[p][i])
-                        + self.social * r2 * (global_best_position[i] - particles[p][i]);
+                        + self.social * r2 * (personal_best_positions[global_best_idx][i] - particles[p][i]);
 
                     // Clamp velocity to fraction of search space
                     let (min, max) = bounds[i];
@@ -223,7 +223,7 @@ impl Solver for ParticleOptimizer {
             cost: global_best_cost,
             iterations: self.max_iter,
             message: "Max iterations reached".into(),
-            params: global_best_position,
+            params: personal_best_positions[global_best_idx].clone(),
             cost_evals,
             grad_evals: 0,
         })
