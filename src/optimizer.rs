@@ -1,20 +1,17 @@
-mod problem;
-mod solver;
-mod utils;
-mod xschem;
-
-pub use problem::CircuitProblem;
-pub use solver::{select_solver, CMAESOptimizer, NewtonOptimizer, ParticleOptimizer};
-pub use solver::{Problem, Solver, SolverResult};
-pub use xschem::XSchemNetlist;
-
-use crate::ngspice::{vecinfoall, vecvaluesall, NgSpice};
-use crate::optimizer::problem::CircuitOptimizationCallback;
-use crate::types::*;
+use crate::core::*;
+use crate::optimization::*;
+use crate::simulation::ngspice::{vecinfoall, vecvaluesall};
+use crate::simulation::{NgSpice, XSchemNetlist};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::path::Path;
-use utils::NGSPICE_OUTPUT;
+use std::sync::Mutex;
+
+/// Enable benchmarking of optimizer components (compile-time constant)
+const ENABLE_BENCHMARKS: bool = true;
+
+/// Global storage for capturing NgSpice output
+pub static NGSPICE_OUTPUT: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 #[pyclass]
 pub struct Optimizer {
@@ -77,7 +74,7 @@ impl Optimizer {
             constraints.iter().map(|c| c.borrow(py).clone()).collect();
 
         // Validate constraints
-        crate::validate_constraints(&mut constraints_native, &params_native)
+        crate::core::validate_constraints(&mut constraints_native, &params_native)
             .map_err(|e| PyValueError::new_err(format!("Validation failed: {}", e)))?;
 
         let has_constraints = !constraints_native.is_empty();
@@ -151,7 +148,12 @@ impl Optimizer {
             println!("✓ NgSpice initialized");
         }
 
-        // Create circuit problem (simplified - no tracking inside)
+        let start = if ENABLE_BENCHMARKS {
+            Some(std::time::Instant::now())
+        } else {
+            None
+        };
+
         let problem = CircuitProblem::new(
             params_native.clone(),
             constraints_native,
@@ -162,6 +164,13 @@ impl Optimizer {
             self.verbose,
         )
         .map_err(|e| PyValueError::new_err(e))?;
+
+        if let Some(start_time) = start {
+            println!(
+                "[TIMING] Problem creation: {:.3}s",
+                start_time.elapsed().as_secs_f64()
+            );
+        }
 
         // Create callback for tracking/display
         let param_names: Vec<String> = params_native.iter().map(|p| p.name.clone()).collect();
@@ -200,10 +209,23 @@ impl Optimizer {
             println!("Solver: {}", solver.name());
         }
 
-        // Run optimization - NOW WITH CALLBACK!
+        let start = if ENABLE_BENCHMARKS {
+            Some(std::time::Instant::now())
+        } else {
+            None
+        };
+
+        // Run optimization
         let result = solver
             .solve(&problem, &mut callback)
             .map_err(|e| PyValueError::new_err(e))?;
+
+        if let Some(start_time) = start {
+            println!(
+                "[TIMING] Solver execution: {:.3}s",
+                start_time.elapsed().as_secs_f64()
+            );
+        }
 
         if self.verbose {
             println!("\n=== OPTIMIZATION COMPLETE ===");
@@ -280,6 +302,7 @@ impl Optimizer {
             Ok(circuit_path.to_string_lossy().to_string())
         }
     }
+
     fn validate_constraints(
         &self,
         parameters: Vec<Py<Parameter>>,
@@ -292,7 +315,7 @@ impl Optimizer {
         let mut constraints_native: Vec<ParameterConstraint> =
             constraints.iter().map(|c| c.borrow(py).clone()).collect();
 
-        crate::validate_constraints(&mut constraints_native, &params_native)
+        crate::core::validate_constraints(&mut constraints_native, &params_native)
             .map_err(|e| PyValueError::new_err(e))?;
 
         for (py_constraint, native_constraint) in constraints.iter().zip(constraints_native.iter())

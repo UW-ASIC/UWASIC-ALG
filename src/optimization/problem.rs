@@ -1,12 +1,16 @@
-use super::utils::NGSPICE_OUTPUT;
-use crate::ngspice::NgSpice;
-use crate::optimizer::solver::traits::{OptimizationCallback, Problem};
-use crate::types::*;
+use crate::core::*;
+use crate::optimization::solvers::traits::{OptimizationCallback, Problem};
+use crate::optimizer::NGSPICE_OUTPUT;
+use crate::simulation::NgSpice;
 use pyo3::Python;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
+use std::time::Instant;
+
+const ENABLE_BENCHMARKING: bool = false;
+const VERBOSITY_FULL: bool = false; // Enables detailed DEBUG output
 
 /// Round parameter value to Sky130 precision constraints
 /// Sky130 has discrete grid-based sizing:
@@ -52,6 +56,9 @@ pub struct CircuitProblem {
 
     // Temporary netlist file (for alterparam + reset workflow)
     temp_netlist_path: PathBuf,
+
+    // Debug flag
+    verbose: bool,
 }
 
 impl CircuitProblem {
@@ -69,98 +76,8 @@ impl CircuitProblem {
         let bounds: Vec<(f64, f64)> = parameters.iter().map(|p| (p.min_val, p.max_val)).collect();
         let param_names: Vec<String> = parameters.iter().map(|p| p.name.clone()).collect();
 
-        // Build constraint data
-        let constraint_data = Self::build_constraints(&parameters, constraints)?;
-
-        // Process environment variables in test spice_code
-        let processed_tests = Self::process_test_environments(&tests, verbose)?;
-
-        // Parameterize netlist (silently)
-        let mut modified_netlist = Self::parameterize_netlist(&netlist_lines, &parameters, false)?;
-
-        // Remove .end, add analysis directives, add .end back
-        Self::add_analysis_directives(&mut modified_netlist, &tests);
-
-        // Write to temporary file and load into NgSpice
-        let temp_netlist_path = Self::write_and_load_netlist(&modified_netlist, &ngspice, false)?;
-
-        if verbose {
-            println!("✓ Circuit loaded successfully");
-            println!("  Parameters: {}", param_names.len());
-            println!("  Constraints: {}", constraint_data.len());
-            println!("  Tests: {}", tests.len());
-            println!("  Targets: {}", targets.len());
-        }
-
-        Ok(Self {
-            params,
-            bounds,
-            param_names,
-            constraints: constraint_data,
-            ngspice: RefCell::new(ngspice),
-            tests: processed_tests,
-            targets,
-            temp_netlist_path,
-        })
-    }
-
-    /// Get the last NgSpice output (useful for debugging)
-    pub fn get_ngspice_output(&self) -> Result<Vec<String>, String> {
-        let output = NGSPICE_OUTPUT
-            .lock()
-            .map_err(|e| format!("Failed to lock output: {}", e))?;
-        Ok(output.clone())
-    }
-
-    /// Print last NgSpice output (for debugging)
-    pub fn print_ngspice_output(&self) {
-        if let Ok(output) = self.get_ngspice_output() {
-            println!("\n=== NgSpice Output ===");
-            for line in output {
-                println!("{}", line);
-            }
-            println!("======================\n");
-        }
-    }
-
-    /// Process test environments by substituting environment variables in spice_code
-    fn process_test_environments(tests: &[Test], verbose: bool) -> Result<Vec<Test>, String> {
-        let mut processed_tests = Vec::with_capacity(tests.len());
-
-        for test in tests {
-            let mut processed_code = test.spice_code.clone();
-
-            // Replace environment variable placeholders with actual values
-            for env in &test.environment {
-                let placeholder = format!("{{{}}}", env.name);
-                processed_code = processed_code.replace(&placeholder, &env.value);
-            }
-
-            if verbose && !test.environment.is_empty() {
-                println!("  Test '{}' environments:", test.name);
-                for env in &test.environment {
-                    println!("    {} = {}", env.name, env.value);
-                }
-            }
-
-            processed_tests.push(Test {
-                name: test.name.clone(),
-                spice_code: processed_code,
-                description: test.description.clone(),
-                environment: test.environment.clone(),
-            });
-        }
-
-        Ok(processed_tests)
-    }
-
-    /// Build constraint data from parameters and constraint definitions
-    fn build_constraints(
-        parameters: &[Parameter],
-        constraints: Vec<ParameterConstraint>,
-    ) -> Result<Vec<ConstraintData>, String> {
+        // Build constraint data (inlined)
         let mut constraint_data = Vec::with_capacity(constraints.len());
-
         for constraint in constraints {
             let target_idx = parameters
                 .iter()
@@ -187,36 +104,58 @@ impl CircuitProblem {
             });
         }
 
-        Ok(constraint_data)
-    }
+        // Process environment variables in test spice_code (inlined)
+        let mut processed_tests = Vec::with_capacity(tests.len());
+        for test in &tests {
+            let mut processed_code = test.spice_code.clone();
+            for env in &test.environment {
+                let placeholder = format!("{{{}}}", env.name);
+                processed_code = processed_code.replace(&placeholder, &env.value);
+            }
+            if VERBOSITY_FULL && !test.environment.is_empty() {
+                println!("  Test '{}' environments:", test.name);
+                for env in &test.environment {
+                    println!("    {} = {}", env.name, env.value);
+                }
+            }
+            processed_tests.push(Test {
+                name: test.name.clone(),
+                spice_code: processed_code,
+                description: test.description.clone(),
+                environment: test.environment.clone(),
+            });
+        }
 
-    /// Parameterize netlist by injecting .param directives and replacing component values
-    fn parameterize_netlist(
-        netlist_lines: &[String],
-        parameters: &[Parameter],
-        verbose: bool,
-    ) -> Result<Vec<String>, String> {
-        let mut result = Vec::new();
-
+        // Parameterize netlist (inlined)
+        let mut modified_netlist = Vec::new();
         // Preserve title line
         if let Some(first_line) = netlist_lines.first() {
             if !first_line.trim().starts_with('.') {
-                result.push(first_line.clone());
+                modified_netlist.push(first_line.clone());
             }
         }
-
         // Add parameter definitions at top
-        result.push("".to_string());
-        result.push("* === Optimization Parameters (Auto-generated) ===".to_string());
-        for param in parameters {
+        modified_netlist.push("".to_string());
+        modified_netlist.push("* === Optimization Parameters (Auto-generated) ===".to_string());
+        for param in &parameters {
             let param_line = format!(".param {} = {}", param.name, param.value);
-            result.push(param_line);
+            modified_netlist.push(param_line);
         }
-        result.push("* === End Parameters ===".to_string());
-        result.push("".to_string());
+        modified_netlist.push("* === End Parameters ===".to_string());
+        modified_netlist.push("".to_string());
 
-        // Build component->parameter mapping
-        let component_params = Self::build_component_param_map(parameters);
+        // Build component->parameter mapping (inlined build_component_param_map)
+        let mut component_params: HashMap<String, Vec<(String, String)>> = HashMap::new();
+        for param in &parameters {
+            if let Some(underscore_pos) = param.name.rfind('_') {
+                let component = param.name[..underscore_pos].to_string();
+                let param_type = param.name[underscore_pos + 1..].to_string();
+                component_params
+                    .entry(component)
+                    .or_insert_with(Vec::new)
+                    .push((param_type, param.name.clone()));
+            }
+        }
 
         // Process netlist lines
         let start_idx = if netlist_lines
@@ -228,128 +167,107 @@ impl CircuitProblem {
         } else {
             0
         };
-
         for line in &netlist_lines[start_idx..] {
             let trimmed = line.trim();
-
             // Skip existing .param lines
             if trimmed.starts_with(".param") {
                 continue;
             }
-
-            // Parameterize component lines (X* or M*)
+            // Parameterize component lines (X* or M*) - inlined parameterize_component_line
             if trimmed.starts_with('X') || trimmed.starts_with('M') {
                 let comp_name = trimmed.split_whitespace().next().unwrap_or("");
                 if let Some(params) = component_params.get(comp_name) {
-                    result.push(Self::parameterize_component_line(line, params));
+                    let mut modified_line = line.to_string();
+                    for (ptype, pname) in params {
+                        let pattern = format!(" {}=", ptype);
+                        if let Some(pos) = modified_line.find(&pattern) {
+                            let val_start = pos + pattern.len();
+                            let remaining = &modified_line[val_start..];
+                            let val_end = remaining
+                                .find(|c: char| c.is_whitespace())
+                                .unwrap_or(remaining.len());
+                            modified_line = format!(
+                                "{}={{{}}}{}",
+                                &modified_line[..pos + pattern.len() - 1],
+                                pname,
+                                &modified_line[val_start + val_end..]
+                            );
+                        }
+                    }
+                    modified_netlist.push(modified_line);
                     continue;
                 }
             }
-
-            result.push(line.clone());
+            modified_netlist.push(line.clone());
         }
 
-        Ok(result)
-    }
-
-    /// Build mapping from component names to their parameters
-    fn build_component_param_map(
-        parameters: &[Parameter],
-    ) -> HashMap<String, Vec<(String, String)>> {
-        let mut component_params: HashMap<String, Vec<(String, String)>> = HashMap::new();
-
-        for param in parameters {
-            if let Some(underscore_pos) = param.name.rfind('_') {
-                let component = param.name[..underscore_pos].to_string();
-                let param_type = param.name[underscore_pos + 1..].to_string();
-                component_params
-                    .entry(component)
-                    .or_insert_with(Vec::new)
-                    .push((param_type, param.name.clone()));
-            }
+        // Add analysis directives (inlined) - just ensure .end is present
+        if !modified_netlist.iter().any(|l| l.trim() == ".end") {
+            modified_netlist.push(".end".to_string());
         }
 
-        component_params
-    }
-
-    /// Parameterize a single component line by replacing values with {param} references
-    fn parameterize_component_line(line: &str, params: &[(String, String)]) -> String {
-        let mut modified = line.to_string();
-
-        for (ptype, pname) in params {
-            let pattern = format!(" {}=", ptype);
-            if let Some(pos) = modified.find(&pattern) {
-                let val_start = pos + pattern.len();
-                let remaining = &modified[val_start..];
-                let val_end = remaining
-                    .find(|c: char| c.is_whitespace())
-                    .unwrap_or(remaining.len());
-
-                // Replace value with {parameter_name}
-                modified = format!(
-                    "{}={{{}}}{}",
-                    &modified[..pos + pattern.len() - 1],
-                    pname,
-                    &modified[val_start + val_end..]
-                );
-            }
-        }
-
-        modified
-    }
-
-    /// Add analysis directives from tests to netlist
-    fn add_analysis_directives(netlist: &mut Vec<String>, tests: &[Test]) {
-        // Remove .end temporarily
-        if let Some(end_pos) = netlist.iter().position(|l| l.trim() == ".end") {
-            netlist.remove(end_pos);
-        }
-
-        // Add analysis directives (.ac, .dc, .tran, .op)
-        for test in tests {
-            for line in test.spice_code.lines() {
-                let trimmed = line.trim();
-                if trimmed.starts_with(".ac ")
-                    || trimmed.starts_with(".dc ")
-                    || trimmed.starts_with(".tran ")
-                    || trimmed.starts_with(".op")
-                {
-                    netlist.push(trimmed.to_string());
-                }
-            }
-        }
-
-        // Add .end back
-        netlist.push(".end".to_string());
-    }
-
-    /// Write netlist to temporary file and load into NgSpice
-    fn write_and_load_netlist(
-        netlist: &[String],
-        ngspice: &NgSpice,
-        verbose: bool,
-    ) -> Result<PathBuf, String> {
+        // Write to temporary file and load into NgSpice (inlined)
         let temp_dir = std::env::temp_dir();
-        let temp_path = temp_dir.join(format!("ngspice_opt_{}.spice", std::process::id()));
-
-        let mut file = std::fs::File::create(&temp_path)
+        let temp_netlist_path = temp_dir.join(format!("ngspice_opt_{}.spice", std::process::id()));
+        let mut file = std::fs::File::create(&temp_netlist_path)
             .map_err(|e| format!("Failed to create temp file: {}", e))?;
-
-        for line in netlist {
+        for line in &modified_netlist {
             writeln!(file, "{}", line).map_err(|e| format!("Failed to write: {}", e))?;
         }
-
-        // Load circuit using 'source' command (required for alterparam + reset)
-        let source_cmd = format!("source {}", temp_path.display());
+        let source_cmd = format!("source {}", temp_netlist_path.display());
         ngspice
             .command(&source_cmd)
             .map_err(|e| format!("Failed to source circuit: {}", e))?;
 
-        Ok(temp_path)
+        if verbose {
+            println!("✓ Circuit loaded successfully");
+            println!("  Parameters: {}", param_names.len());
+            println!("  Constraints: {}", constraint_data.len());
+            println!("  Tests: {}", tests.len());
+            println!("  Targets: {}", targets.len());
+        }
+
+        Ok(Self {
+            params,
+            bounds,
+            param_names,
+            constraints: constraint_data,
+            ngspice: RefCell::new(ngspice),
+            tests: processed_tests,
+            targets,
+            temp_netlist_path,
+            verbose,
+        })
     }
 
-    /// Update circuit parameters using alterparam + reset + run
+    /// Get the last NgSpice output (useful for debugging)
+    pub fn get_ngspice_output(&self) -> Result<Vec<String>, String> {
+        let output = NGSPICE_OUTPUT
+            .lock()
+            .map_err(|e| format!("Failed to lock output: {}", e))?;
+        Ok(output.clone())
+    }
+
+    /// Print last NgSpice output (for debugging)
+    pub fn print_ngspice_output(&self) {
+        if let Ok(output) = self.get_ngspice_output() {
+            println!("\n=== NgSpice Output ===");
+            for line in output {
+                println!("{}", line);
+            }
+            println!("======================\n");
+        }
+    }
+
+    /// Update circuit parameters using alterparam + reset
+    /// NOTE: Does NOT run simulation - that's done per-test in execute_measurements
     pub fn update_parameters(&self, params: &[f64]) -> Result<(), String> {
+        let start = if ENABLE_BENCHMARKING {
+            Some(Instant::now())
+        } else {
+            None
+        };
+
         let ngspice = self.ngspice.borrow();
 
         // Clear previous output
@@ -357,6 +275,12 @@ impl CircuitProblem {
             .lock()
             .map_err(|e| format!("Failed to lock output: {}", e))?
             .clear();
+
+        let alterparam_start = if ENABLE_BENCHMARKING {
+            Some(Instant::now())
+        } else {
+            None
+        };
 
         // Use alterparam on the actual parameter names (lowercase)
         for (param_name, &value) in self.param_names.iter().zip(params.iter()) {
@@ -367,28 +291,63 @@ impl CircuitProblem {
                 .map_err(|e| format!("Failed to execute '{}': {}", cmd, e))?;
         }
 
-        // Reset to clear previous simulation data
-        ngspice
-            .command("reset")
-            .map_err(|e| format!("Failed to execute 'reset': {}", e))?;
+        if let Some(t) = alterparam_start {
+            eprintln!(
+                "[BENCH] alterparam ({} params): {:.3}ms",
+                params.len(),
+                t.elapsed().as_secs_f64() * 1000.0
+            );
+        }
 
-        // Run simulation with new parameter values
-        ngspice
-            .command("run")
-            .map_err(|e| format!("Failed to execute 'run': {}", e))?;
+        let reset_start = if ENABLE_BENCHMARKING {
+            Some(Instant::now())
+        } else {
+            None
+        };
+
+        if let Some(t) = reset_start {
+            eprintln!("[BENCH] reset: {:.3}ms", t.elapsed().as_secs_f64() * 1000.0);
+        }
+
+        if let Some(t) = start {
+            eprintln!(
+                "[BENCH] update_parameters total: {:.3}ms",
+                t.elapsed().as_secs_f64() * 1000.0
+            );
+        }
 
         Ok(())
     }
 
     /// Execute test measurements with proper environment isolation
+    /// For multi-test support: runs each test's analysis separately
     pub fn execute_measurements(&self) -> Result<(), String> {
+        let start = if ENABLE_BENCHMARKING {
+            Some(Instant::now())
+        } else {
+            None
+        };
+
         let ngspice = self.ngspice.borrow();
 
         for test in &self.tests {
+            let test_start = if ENABLE_BENCHMARKING {
+                Some(Instant::now())
+            } else {
+                None
+            };
+
+            if VERBOSITY_FULL {
+                eprintln!("[DEBUG] Running test: {}", test.name);
+            }
+
             // Apply environment settings before running test
             for env in &test.environment {
                 let env_cmd = Self::environment_to_ngspice_command(&env.name, &env.value);
                 if !env_cmd.is_empty() {
+                    if VERBOSITY_FULL {
+                        eprintln!("[DEBUG] Setting environment: {}", env_cmd);
+                    }
                     ngspice.command(&env_cmd).map_err(|e| {
                         format!(
                             "Failed to set environment '{}={}' in test '{}': {} (command: '{}')",
@@ -398,10 +357,71 @@ impl CircuitProblem {
                 }
             }
 
-            // Execute test measurements
+            // Reset to clear previous simulation data
+            ngspice
+                .command("reset")
+                .map_err(|e| format!("Failed to execute 'reset': {}", e))?;
+
+            // Extract and run analysis directive for this test
+            // NOTE: Convert netlist directives (.ac, .dc, etc.) to interactive commands (ac, dc, etc.)
+            let analysis_start = if ENABLE_BENCHMARKING {
+                Some(Instant::now())
+            } else {
+                None
+            };
+            let mut analysis_run = false;
             for line in test.spice_code.lines() {
                 let trimmed = line.trim();
-                // Execute measurement commands (skip analysis directives, they're in netlist)
+                if trimmed.starts_with(".ac ")
+                    || trimmed.starts_with(".dc ")
+                    || trimmed.starts_with(".tran ")
+                    || trimmed.starts_with(".op")
+                {
+                    // Convert netlist directive to interactive command (remove leading dot)
+                    let interactive_cmd = &trimmed[1..]; // Remove the '.'
+
+                    if VERBOSITY_FULL {
+                        eprintln!(
+                            "[DEBUG] Running analysis: {} (converted from {})",
+                            interactive_cmd, trimmed
+                        );
+                    }
+                    ngspice.command(interactive_cmd).map_err(|e| {
+                        format!(
+                            "Failed to execute analysis '{}' in test '{}': {}",
+                            interactive_cmd, test.name, e
+                        )
+                    })?;
+                    analysis_run = true;
+                }
+            }
+
+            if let Some(t) = analysis_start {
+                eprintln!(
+                    "[BENCH]   {} analysis: {:.3}ms",
+                    test.name,
+                    t.elapsed().as_secs_f64() * 1000.0
+                );
+            }
+
+            if !analysis_run {
+                return Err(format!(
+                    "No analysis directive found in test '{}'",
+                    test.name
+                ));
+            }
+
+            // Execute measurement commands for this test
+            let meas_start = if ENABLE_BENCHMARKING {
+                Some(Instant::now())
+            } else {
+                None
+            };
+            let mut meas_count = 0;
+
+            for line in test.spice_code.lines() {
+                let trimmed = line.trim();
+                // Execute measurement commands (skip analysis directives, control blocks, comments)
                 if !trimmed.is_empty()
                     && !trimmed.starts_with('*')
                     && trimmed != ".control"
@@ -412,14 +432,46 @@ impl CircuitProblem {
                     && !trimmed.starts_with(".tran ")
                     && !trimmed.starts_with(".op")
                 {
+                    if VERBOSITY_FULL {
+                        eprintln!("[DEBUG] Executing command: {}", trimmed);
+                    }
                     ngspice.command(trimmed).map_err(|e| {
                         format!(
                             "Failed to execute command '{}' in test '{}': {}",
                             trimmed, test.name, e
                         )
                     })?;
+                    meas_count += 1;
                 }
             }
+
+            if let Some(t) = meas_start {
+                eprintln!(
+                    "[BENCH]   {} measurements ({} cmds): {:.3}ms",
+                    test.name,
+                    meas_count,
+                    t.elapsed().as_secs_f64() * 1000.0
+                );
+            }
+
+            if let Some(t) = test_start {
+                eprintln!(
+                    "[BENCH]   {} total: {:.3}ms",
+                    test.name,
+                    t.elapsed().as_secs_f64() * 1000.0
+                );
+            }
+
+            if VERBOSITY_FULL {
+                eprintln!("[DEBUG] Test {} completed", test.name);
+            }
+        }
+
+        if let Some(t) = start {
+            eprintln!(
+                "[BENCH] execute_measurements total: {:.3}ms",
+                t.elapsed().as_secs_f64() * 1000.0
+            );
         }
 
         Ok(())
@@ -445,11 +497,24 @@ impl CircuitProblem {
 
     /// Extract metrics from NgSpice output
     pub fn extract_metrics(&self) -> Result<HashMap<String, f64>, String> {
+        let start = if ENABLE_BENCHMARKING {
+            Some(Instant::now())
+        } else {
+            None
+        };
+
         let mut metrics = HashMap::new();
 
         let output = NGSPICE_OUTPUT
             .lock()
             .map_err(|e| format!("Failed to lock output: {}", e))?;
+
+        if VERBOSITY_FULL {
+            eprintln!("[DEBUG] NgSpice output ({} lines):", output.len());
+            for (i, line) in output.iter().enumerate() {
+                eprintln!("[DEBUG]   {}: {}", i, line);
+            }
+        }
 
         for target in &self.targets {
             let meas_name = format!("{}_val", target.metric.to_lowercase());
@@ -472,6 +537,9 @@ impl CircuitProblem {
             }
 
             if let Some(value) = last_value {
+                if VERBOSITY_FULL {
+                    eprintln!("[DEBUG] Found metric {}: {}", target.metric, value);
+                }
                 metrics.insert(target.metric.clone(), value);
             } else {
                 // Use penalty value if measurement not found/failed
@@ -480,21 +548,67 @@ impl CircuitProblem {
                     TargetMode::Max => target.value * 10.0,
                     TargetMode::Target => target.value * 2.0,
                 };
+                if VERBOSITY_FULL {
+                    eprintln!(
+                        "[DEBUG] Metric {} not found, using penalty: {}",
+                        target.metric, penalty_value
+                    );
+                }
                 metrics.insert(target.metric.clone(), penalty_value);
             }
         }
 
         drop(output);
+
+        if let Some(t) = start {
+            eprintln!(
+                "[BENCH] extract_metrics: {:.3}ms",
+                t.elapsed().as_secs_f64() * 1000.0
+            );
+        }
+
         Ok(metrics)
     }
 
-    /// Compute cost from metrics and targets
-    pub fn compute_cost_from_metrics(&self, metrics: &HashMap<String, f64>) -> f64 {
-        let mut total_cost = 0.0;
+    /// Get targets (for callback access)
+    pub fn targets(&self) -> &[Target] {
+        &self.targets
+    }
 
+    /// Get parameter names (for callback access)
+    pub fn param_names(&self) -> &[String] {
+        &self.param_names
+    }
+}
+
+// Implement Problem trait
+impl Problem for CircuitProblem {
+    fn cost(&self, params: &[f64]) -> Result<f64, String> {
+        let total_start = if ENABLE_BENCHMARKING {
+            Some(Instant::now())
+        } else {
+            None
+        };
+
+        let rounded_params: Vec<f64> = params
+            .iter()
+            .map(|&p| round_to_sky130_precision(p))
+            .collect();
+
+        self.update_parameters(params)
+            .map_err(|e| format!("Cost evaluation failed during parameter update: {}", e))?;
+
+        self.execute_measurements()
+            .map_err(|e| format!("Cost evaluation failed during measurements: {}", e))?;
+
+        let metrics = self
+            .extract_metrics()
+            .map_err(|e| format!("Cost evaluation failed during metric extraction: {}", e))?;
+
+        // Compute cost from metrics (inlined)
+        let mut total_cost = 0.0;
         for target in &self.targets {
             let metric_value = metrics.get(&target.metric).unwrap_or(&0.0);
-
             let error = match target.mode {
                 TargetMode::Min => {
                     if *metric_value < target.value {
@@ -512,44 +626,18 @@ impl CircuitProblem {
                 }
                 TargetMode::Target => (metric_value - target.value).abs(),
             };
-
             let weighted_error = error * target.weight;
             total_cost += weighted_error;
         }
 
-        total_cost
-    }
+        if let Some(t) = total_start {
+            eprintln!(
+                "[BENCH] cost() total: {:.3}ms\n",
+                t.elapsed().as_secs_f64() * 1000.0
+            );
+        }
 
-    /// Get targets (for callback access)
-    pub fn targets(&self) -> &[Target] {
-        &self.targets
-    }
-
-    /// Get parameter names (for callback access)
-    pub fn param_names(&self) -> &[String] {
-        &self.param_names
-    }
-}
-
-// Implement Problem trait - simplified interface
-impl Problem for CircuitProblem {
-    fn cost(&self, params: &[f64]) -> Result<f64, String> {
-        let rounded_params: Vec<f64> = params
-            .iter()
-            .map(|&p| round_to_sky130_precision(p))
-            .collect();
-
-        self.update_parameters(params)
-            .map_err(|e| format!("Cost evaluation failed during parameter update: {}", e))?;
-
-        self.execute_measurements()
-            .map_err(|e| format!("Cost evaluation failed during measurements: {}", e))?;
-
-        let metrics = self
-            .extract_metrics()
-            .map_err(|e| format!("Cost evaluation failed during metric extraction: {}", e))?;
-
-        Ok(self.compute_cost_from_metrics(&metrics))
+        Ok(total_cost)
     }
 
     fn num_params(&self) -> usize {
@@ -565,6 +653,12 @@ impl Problem for CircuitProblem {
     }
 
     fn apply_constraints(&self, params: &mut [f64]) -> Result<(), String> {
+        let start = if ENABLE_BENCHMARKING {
+            Some(Instant::now())
+        } else {
+            None
+        };
+
         for constraint in &self.constraints {
             let source_values: Vec<f64> = constraint
                 .source_indices
@@ -611,6 +705,13 @@ impl Problem for CircuitProblem {
         // **ROUND ALL PARAMS AFTER CONSTRAINT APPLICATION**
         for param in params.iter_mut() {
             *param = round_to_sky130_precision(*param);
+        }
+
+        if let Some(t) = start {
+            eprintln!(
+                "[BENCH] apply_constraints: {:.3}ms",
+                t.elapsed().as_secs_f64() * 1000.0
+            );
         }
 
         Ok(())
