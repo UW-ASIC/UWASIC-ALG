@@ -4,15 +4,12 @@ use std::path::PathBuf;
 fn main() {
     println!("cargo:rerun-if-changed=include/ngspice.h");
 
-    // Link to ngspice shared library
-    println!("cargo:rustc-link-lib=ngspice");
+    let library = pkg_config::Config::new()
+        // Link dynamically to the ngspice shared library
+        .statik(false) 
+        .probe("ngspice")
+        .expect("Could not find ngspice library via pkg-config. Ensure libngspice is available and PKG_CONFIG_PATH is set correctly.");
 
-    // Add library search path if specified
-    if let Ok(lib_path) = env::var("NGSPICE_LIB") {
-        println!("cargo:rustc-link-search=native={}", lib_path);
-    }
-
-    // Build bindgen with proper clang args
     let mut builder = bindgen::Builder::default()
         .header("include/ngspice.h")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
@@ -33,11 +30,10 @@ fn main() {
         .allowlist_type("vecinfo")
         .allowlist_type("vecinfoall");
 
-    // Add include path if specified (for Windows/custom installs)
-    if let Ok(include_path) = env::var("NGSPICE_INCLUDE") {
-        builder = builder.clang_arg(format!("-I{}", include_path));
+    for path in library.include_paths {
+        builder = builder.clang_arg(format!("-I{}", path.to_string_lossy()));
     }
-
+    
     // Generate bindings
     let bindings = builder
         .generate()
